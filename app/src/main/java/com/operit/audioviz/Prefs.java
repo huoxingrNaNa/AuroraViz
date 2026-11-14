@@ -27,6 +27,10 @@ public final class Prefs {
     public static final int SOURCE_MIC = 0;
     public static final int SOURCE_SYSTEM = 1;
 
+    private static final String K_REC_RES = "rec_res";
+    private static final String K_REC_FPS = "rec_fps";
+    private static final String K_REC_BR = "rec_br";
+
     private Prefs() {
     }
 
@@ -153,5 +157,29 @@ public final class Prefs {
 
     public static void setCustomColors(Context c, int c0, int c1, int c2) {
         sp(c).edit().putInt(K_C0, c0).putInt(K_C1, c1).putInt(K_C2, c2).apply();
+    }
+
+    public static int recRes(Context c) {
+        return sp(c).getInt(K_REC_RES, 0);
+    }
+
+    public static void setRecRes(Context c, int v) {
+        sp(c).edit().putInt(K_REC_RES, v).apply();
+    }
+
+    public static int recFps(Context c) {
+        return sp(c).getInt(K_REC_FPS, 1);
+    }
+
+    public static void setRecFps(Context c, int v) {
+        sp(c).edit().putInt(K_REC_FPS, v).apply();
+    }
+
+    public static int recBr(Context c) {
+        return sp(c).getInt(K_REC_BR, 1);
+    }
+
+    public static void setRecBr(Context c, int v) {
+        sp(c).edit().putInt(K_REC_BR, v).apply();
     }
 }

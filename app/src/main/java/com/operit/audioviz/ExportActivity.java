@@ -25,6 +25,9 @@ public class ExportActivity extends Activity {
     private TextView txtFile, txtInfo, txtStatus;
     private Switch swMute;
     private ChipView[] lenChips;
+    private ChipView[] resChips, fpsChips, brChips;
+    private TextView txtListen;
+    private int resIdx, fpsIdx, brIdx;
 
     private final FileAudioPlayer player = new FileAudioPlayer();
     private final VideoRecorder recorder = new VideoRecorder();
@@ -70,6 +73,31 @@ public class ExportActivity extends Activity {
             lenChips[i].setLabel(labels[i]);
             lenChips[i].setOnClickListener(v -> selectLength(idx));
         }
+        resChips = new ChipView[]{findViewById(R.id.res0), findViewById(R.id.res1)};
+        fpsChips = new ChipView[]{findViewById(R.id.fps0), findViewById(R.id.fps1),
+                findViewById(R.id.fps2)};
+        brChips = new ChipView[]{findViewById(R.id.br0), findViewById(R.id.br1),
+                findViewById(R.id.br2)};
+        txtListen = findViewById(R.id.txtListen);
+        String[] resLabels = {"720p", "1080p"};
+        String[] fpsLabels = {"30 fps", "50 fps", "60 fps"};
+        String[] brLabels = {"8 Mbps", "12 Mbps", "20 Mbps"};
+        bindChips(resChips, resLabels, Prefs.recRes(this), i -> {
+            resIdx = i;
+            Prefs.setRecRes(ExportActivity.this, i);
+            updateStartLabel();
+        });
+        bindChips(fpsChips, fpsLabels, Prefs.recFps(this), i -> {
+            fpsIdx = i;
+            Prefs.setRecFps(ExportActivity.this, i);
+        });
+        bindChips(brChips, brLabels, Prefs.recBr(this), i -> {
+            brIdx = i;
+            Prefs.setRecBr(ExportActivity.this, i);
+        });
+        resIdx = Prefs.recRes(this);
+        fpsIdx = Prefs.recFps(this);
+        brIdx = Prefs.recBr(this);
         selectLength(0);
 
         btnStart.setOnClickListener(v -> toggleExport());
@@ -105,6 +133,50 @@ public class ExportActivity extends Activity {
                 player.sampleRate(), player.channels(), ""));
         txtStatus.setText("已就绪，点“开始导出”边播放边渲染");
         updateStartLabel();
+    }
+
+    private void bindChips(ChipView[] chips, String[] labels, int selected,
+                           java.util.function.IntConsumer onPick) {
+        for (int i = 0; i < chips.length; i++) {
+            final int idx = i;
+            chips[i].setPalette(palette);
+            chips[i].setLabel(labels[i]);
+            chips[i].setChecked(i == selected);
+            chips[i].setOnClickListener(v -> {
+                for (int k = 0; k < chips.length; k++) chips[k].setChecked(k == idx);
+                onPick.accept(idx);
+                updateListenState();
+            });
+        }
+    }
+
+    /** 输出参数：分辨率 / 帧率 / 码率 */
+    private void applyRecorderConfig() {
+        int w = resIdx == 0 ? 1280 : 1920;
+        int h = resIdx == 0 ? 720 : 1080;
+        int[] fr = {30, 50, 60};
+        int[] br = {8_000_000, 12_000_000, 20_000_000};
+        recorder.setConfig(w, h, fr[Math.max(0, Math.min(2, fpsIdx))],
+                br[Math.max(0, Math.min(2, brIdx))]);
+    }
+
+    /** 监听状态提示：未监听时录制只会得到待机动画 */
+    private void updateListenState() {
+        if (txtListen == null) return;
+        boolean on = AudioEngine.get().isRunning();
+        if (on) {
+            txtListen.setText("● 监听中：画面和音轨都来自当前监听");
+            txtListen.setTextColor(0xFF7CE0C0);
+        } else {
+            txtListen.setText("○ 未监听：直接录制只会得到待机动画（无声音）");
+            txtListen.setTextColor(0xFFFFB27A);
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        updateListenState();
     }
 
     private void selectLength(int idx) {
@@ -143,12 +215,14 @@ public class ExportActivity extends Activity {
         }
         final int total = sec;
 
+        updateListenState();
         txtStatus.setText(uri == null ? "准备录制当前画面…" : "准备导出（含音轨）…");
         btnStart.setLabel("停止并保存");
 
         // 两条路径都带音轨：
         //  选了文件 → 用文件解码出的 PCM（与原曲同步）
         //  没选文件 → 用当前监听的实时 PCM（麦克风 / 系统音频）
+        applyRecorderConfig();
         recorder.setAudioEnabled(true);
         if (uri != null) {
             AudioEngine.get().setPcmSink(null);

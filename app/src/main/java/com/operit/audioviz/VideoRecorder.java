@@ -57,11 +57,12 @@ public class VideoRecorder {
         void onError(String message);
     }
 
-    public static final int WIDTH = 1280;
-    public static final int HEIGHT = 720;
-    private static final int FPS = 30;
-    private static final int BITRATE = 12_000_000;
-    private static final int IFRAME_INTERVAL = 1;
+    // ---- 输出参数（可在导出页调整）----
+    private int width = 1280;
+    private int height = 720;
+    private int fps = 50;
+    private int bitrate = 12_000_000;
+    private static final int IFRAME_INTERVAL = 2;
     public static final int SECONDS = 15;
 
     private volatile boolean running = false;
@@ -142,13 +143,23 @@ public class VideoRecorder {
         view.setPeakMode(Prefs.peakGlow(app));
         view.setIdleAnim(Prefs.idleAnim(app));
         view.setSelfDrive(false);
-        view.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.makeMeasureSpec(HEIGHT, View.MeasureSpec.EXACTLY));
-        view.layout(0, 0, WIDTH, HEIGHT);
-        final Bitmap bmp = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888);
+        view.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
+        view.layout(0, 0, width, height);
+        final Bitmap bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         thread = new Thread(() -> record(app, cb, view, bmp, this.seconds), "AuroraRecorder");
         thread.setPriority(Thread.NORM_PRIORITY + 1);
         thread.start();
+    }
+
+    /** 逐次导出前设置输出参数；传 0 表示保持当前值 */
+    public void setConfig(int w, int h, int f, int b) {
+        if (w > 0 && h > 0) {
+            width = (w / 2) * 2;
+            height = (h / 2) * 2;
+        }
+        if (f > 0) fps = f;
+        if (b > 0) bitrate = b;
     }
 
     public void stop() {
@@ -287,19 +298,31 @@ public class VideoRecorder {
             Canvas canvas = new Canvas(bitmap);
 
             // ---- 视频编码器 ----
-            MediaFormat format = MediaFormat.createVideoFormat("video/avc", WIDTH, HEIGHT);
+            MediaFormat format = MediaFormat.createVideoFormat("video/avc", width, height);
             format.setInteger(MediaFormat.KEY_COLOR_FORMAT,
                     MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
-            format.setInteger(MediaFormat.KEY_BIT_RATE, BITRATE);
-            format.setInteger(MediaFormat.KEY_FRAME_RATE, FPS);
+            format.setInteger(MediaFormat.KEY_BIT_RATE, bitrate);
+            format.setInteger(MediaFormat.KEY_FRAME_RATE, fps);
             format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, IFRAME_INTERVAL);
+            try {
+                format.setInteger(MediaFormat.KEY_BITRATE_MODE,
+                        MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR);
+            } catch (Throwable ignored) {
+            }
+            try {
+                format.setInteger(MediaFormat.KEY_PROFILE,
+                        MediaCodecInfo.CodecProfileLevel.AVCProfileHigh);
+                format.setInteger(MediaFormat.KEY_LEVEL,
+                        MediaCodecInfo.CodecProfileLevel.AVCLevel41);
+            } catch (Throwable ignored) {
+            }
             codec = MediaCodec.createEncoderByType("video/avc");
             codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
             Surface input = codec.createInputSurface();
             codec.start();
 
             blitter = new GlBlitter();
-            if (!blitter.init(input, WIDTH, HEIGHT)) {
+            if (!blitter.init(input, width, height)) {
                 throw new IllegalStateException("OpenGL 初始化失败，无法录制");
             }
 
@@ -338,8 +361,8 @@ public class VideoRecorder {
             }
 
             final MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
-            final int total = seconds * FPS;
-            final long frameNs = 1_000_000_000L / FPS;
+            final int total = seconds * fps;
+            final long frameNs = 1_000_000_000L / fps;
             final long baseNs = System.nanoTime();
             int frame = 0;
             int lastReported = seconds;
@@ -360,7 +383,7 @@ public class VideoRecorder {
                 drainVideo(codec, info);
 
                 // 迟迟拿不到音频格式就降级为纯视频，避免无限等待
-                if (audioEnabled && !audioFailed && videoTrack < 0 && frame > FPS) {
+                if (audioEnabled && !audioFailed && videoTrack < 0 && frame > fps) {
                     audioFailed = true;
                     synchronized (muxLock) {
                         maybeStartLocked();
@@ -368,7 +391,7 @@ public class VideoRecorder {
                 }
 
                 frame++;
-                int left = seconds - frame / FPS;
+                int left = seconds - frame / fps;
                 if (left != lastReported) {
                     lastReported = left;
                     final int l = left;

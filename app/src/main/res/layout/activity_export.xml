@@ -27,7 +27,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
             android:tag="hint"
-            android:text="导入音频文件渲染导出（含音轨），时长自选；也可以直接录当前监听画面（无声）"
+            android:text="导入音频渲染（含音轨）或直接录当前监听画面；时长、分辨率、帧率、码率均可调"
             android:textColor="#FF6F7896"
             android:textSize="10sp" />
 
@@ -108,6 +108,96 @@
                     android:layout_weight="1" />
             </LinearLayout>
 
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:tag="label"
+                android:text="分辨率"
+                android:textColor="#FF8A93B2"
+                android:textSize="10sp"
+                android:textStyle="bold" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:orientation="horizontal">
+                <com.operit.audioviz.ChipView
+                    android:id="@+id/res0"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1" />
+                <com.operit.audioviz.ChipView
+                    android:id="@+id/res1"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginLeft="8dp"
+                    android:layout_weight="1" />
+            </LinearLayout>
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:tag="label"
+                android:text="帧率"
+                android:textColor="#FF8A93B2"
+                android:textSize="10sp"
+                android:textStyle="bold" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:orientation="horizontal">
+                <com.operit.audioviz.ChipView
+                    android:id="@+id/fps0"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1" />
+                <com.operit.audioviz.ChipView
+                    android:id="@+id/fps1"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginLeft="8dp"
+                    android:layout_weight="1" />
+                <com.operit.audioviz.ChipView
+                    android:id="@+id/fps2"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginLeft="8dp"
+                    android:layout_weight="1" />
+            </LinearLayout>
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:tag="label"
+                android:text="码率"
+                android:textColor="#FF8A93B2"
+                android:textSize="10sp"
+                android:textStyle="bold" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:orientation="horizontal">
+                <com.operit.audioviz.ChipView
+                    android:id="@+id/br0"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1" />
+                <com.operit.audioviz.ChipView
+                    android:id="@+id/br1"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginLeft="8dp"
+                    android:layout_weight="1" />
+                <com.operit.audioviz.ChipView
+                    android:id="@+id/br2"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginLeft="8dp"
+                    android:layout_weight="1" />
+            </LinearLayout>
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -147,6 +237,14 @@
             </LinearLayout>
         </LinearLayout>
 
+        <TextView
+            android:id="@+id/txtListen"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:text=""
+            android:textColor="#FF8A93B2"
+            android:textSize="10sp" />
         <com.operit.audioviz.VisualizerView
             android:id="@+id/preview"
             android:layout_width="match_parent"
