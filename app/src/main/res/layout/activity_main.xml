@@ -1,0 +1,612 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/rootBg"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:clipToPadding="false"
+    android:fillViewport="true"
+    android:scrollbars="none">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingLeft="22dp"
+        android:paddingTop="44dp"
+        android:paddingRight="22dp"
+        android:paddingBottom="36dp">
+
+        <!-- 头部 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/title"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:includeFontPadding="false"
+                    android:letterSpacing="0.16"
+                    android:text="AURORA"
+                    android:textColor="#FFF2F5FF"
+                    android:textSize="34sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:letterSpacing="0.30"
+                    android:text="AUDIO  VISUALIZER"
+                    android:tag="hint"
+                    android:textColor="#FF7E88A8"
+                    android:textSize="9sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/statusShizuku"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_pill"
+                android:text="SHIZUKU 检测中"
+                android:textColor="#FF8A93B2"
+                android:textSize="9sp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/message"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:lineSpacingExtra="3dp"
+            android:text=""
+            android:textColor="#FFFF6B8A"
+            android:textSize="11sp"
+            android:visibility="gone" />
+
+        <!-- 预览 -->
+        <FrameLayout
+            android:id="@+id/previewCard"
+            android:layout_width="match_parent"
+            android:layout_height="232dp"
+            android:layout_marginTop="18dp"
+            android:background="@drawable/bg_card"
+            android:padding="12dp">
+
+            <com.operit.audioviz.VisualizerView
+                android:id="@+id/preview"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="top|end"
+                android:layout_marginRight="12dp"
+                android:layout_marginTop="10dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <View
+                    android:layout_width="6dp"
+                    android:layout_height="6dp"
+                    android:background="@drawable/dot" />
+
+                <TextView
+                    android:id="@+id/stateText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginLeft="7dp"
+                    android:letterSpacing="0.22"
+                    android:text="STANDBY"
+                    android:textColor="#FF9AA5C4"
+                    android:textSize="9sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+        </FrameLayout>
+
+        <!-- 音源 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="22dp"
+            android:letterSpacing="0.2"
+            android:tag="label"
+            android:text="监听来源"
+            android:textColor="#FF8A93B2"
+            android:textSize="10sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:id="@+id/sourceGroup"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="horizontal">
+
+            <com.operit.audioviz.ChipView
+                android:id="@+id/chipMic"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginRight="10dp"
+                android:layout_weight="1" />
+
+            <com.operit.audioviz.ChipView
+                android:id="@+id/chipSys"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/audioHint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:lineSpacingExtra="2dp"
+            android:tag="hint"
+            android:text="监听设备麦克风输入"
+            android:textColor="#FF6F7896"
+            android:textSize="9.5sp" />
+
+        <TextView
+            android:id="@+id/diag"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:tag="hint"
+            android:text=""
+            android:textColor="#FF6F7896"
+            android:textSize="9sp"
+            android:visibility="gone" />
+
+        <!-- 模式 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:letterSpacing="0.2"
+            android:tag="label"
+            android:text="可视化模式"
+            android:textColor="#FF8A93B2"
+            android:textSize="10sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="horizontal">
+
+            <com.operit.audioviz.ChipView
+                android:id="@+id/st0"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1" />
+
+            <com.operit.audioviz.ChipView
+                android:id="@+id/st1"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="8dp"
+                android:layout_weight="1" />
+
+            <com.operit.audioviz.ChipView
+                android:id="@+id/st2"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="8dp"
+                android:layout_weight="1" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal">
+
+            <com.operit.audioviz.ChipView
+                android:id="@+id/st3"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1" />
+
+            <com.operit.audioviz.ChipView
+                android:id="@+id/st4"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="8dp"
+                android:layout_weight="1" />
+
+            <com.operit.audioviz.ChipView
+                android:id="@+id/st5"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="8dp"
+                android:layout_weight="1" />
+        </LinearLayout>
+
+        <!-- 主题 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:letterSpacing="0.2"
+                android:tag="label"
+                android:text="配色主题"
+                android:textColor="#FF8A93B2"
+                android:textSize="10sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/themeLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:letterSpacing="0.12"
+                android:text="霓虹"
+                android:textColor="#FF8A93B2"
+                android:textSize="10sp" />
+        </LinearLayout>
+
+                                <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:orientation="horizontal">
+
+            <com.operit.audioviz.SwatchView
+                android:id="@+id/sw0"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                />
+            <com.operit.audioviz.SwatchView
+                android:id="@+id/sw1"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_marginLeft="8dp"
+                />
+            <com.operit.audioviz.SwatchView
+                android:id="@+id/sw2"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_marginLeft="8dp"
+                />
+            <com.operit.audioviz.SwatchView
+                android:id="@+id/sw3"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_marginLeft="8dp"
+                />
+            <com.operit.audioviz.SwatchView
+                android:id="@+id/sw4"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_marginLeft="8dp"
+                />
+            <com.operit.audioviz.SwatchView
+                android:id="@+id/sw5"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_marginLeft="8dp"
+                />
+            <com.operit.audioviz.SwatchView
+                android:id="@+id/sw6"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_marginLeft="8dp"
+                />
+        </LinearLayout>
+
+        <!-- 主操作 -->
+        <com.operit.audioviz.GradientButton
+            android:id="@+id/btnToggle"
+            android:layout_width="match_parent"
+            android:layout_height="58dp"
+            android:layout_marginTop="24dp" />
+
+        <TextView
+            android:id="@+id/mainHint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:tag="hint"
+            android:text="监听可以在应用内单独进行，悬浮窗可随时开关"
+            android:textColor="#FF6F7896"
+            android:textSize="9.5sp" />
+
+        <!-- 高级设置 -->
+        <LinearLayout
+            android:id="@+id/advCard"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:paddingLeft="18dp"
+            android:paddingTop="16dp"
+            android:paddingRight="18dp"
+            android:paddingBottom="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="显示悬浮窗"
+                        android:textColor="#FFF2F5FF"
+                        android:textSize="12.5sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:tag="hint"
+                        android:text="关闭后仅在应用内显示可视化"
+                        android:textColor="#FF6F7896"
+                        android:textSize="9.5sp" />
+                </LinearLayout>
+
+                <Switch
+                    android:id="@+id/swOverlay"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:showText="false" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="14dp"
+                android:background="@drawable/divider" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="待机呼吸动画"
+                        android:textColor="#FFF2F5FF"
+                        android:textSize="12.5sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:tag="hint"
+                        android:text="关闭后未监听时不显示任何波形"
+                        android:textColor="#FF6F7896"
+                        android:textSize="9.5sp" />
+                </LinearLayout>
+
+                <Switch
+                    android:id="@+id/swIdle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:showText="false" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="14dp"
+                android:background="@drawable/divider" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:tag="label"
+                android:text="峰值光点（柱状模式）"
+                android:textColor="#FF8A93B2"
+                android:textSize="10sp"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:orientation="horizontal">
+
+                <com.operit.audioviz.ChipView
+                    android:id="@+id/pk0"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1" />
+
+                <com.operit.audioviz.ChipView
+                    android:id="@+id/pk1"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginLeft="8dp"
+                    android:layout_weight="1" />
+
+                <com.operit.audioviz.ChipView
+                    android:id="@+id/pk2"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginLeft="8dp"
+                    android:layout_weight="1" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="14dp"
+                android:background="@drawable/divider" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="一键授权（Shizuku）"
+                        android:textColor="#FFF2F5FF"
+                        android:textSize="12.5sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/shizukuHint"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:tag="hint"
+                        android:text="自动开启悬浮窗 / 录音 / 通知权限"
+                        android:textColor="#FF6F7896"
+                        android:textSize="9.5sp" />
+                </LinearLayout>
+
+                <com.operit.audioviz.GhostButton
+                    android:id="@+id/btnAuth"
+                    android:layout_width="104dp"
+                    android:layout_height="40dp" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="14dp"
+                android:background="@drawable/divider" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:tag="label"
+                android:text="灵敏度"
+                android:textColor="#FF8A93B2"
+                android:textSize="10sp"
+                android:textStyle="bold" />
+
+            <SeekBar
+                android:id="@+id/seekSens"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:max="100"
+                android:paddingLeft="0dp"
+                android:paddingRight="0dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:tag="label"
+                android:text="悬浮窗尺寸"
+                android:textColor="#FF8A93B2"
+                android:textSize="10sp"
+                android:textStyle="bold" />
+
+            <SeekBar
+                android:id="@+id/seekSize"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:max="100"
+                android:paddingLeft="0dp"
+                android:paddingRight="0dp" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="14dp"
+                android:background="@drawable/divider" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:tag="label"
+                android:text="界面风格"
+                android:textColor="#FF8A93B2"
+                android:textSize="10sp"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:orientation="horizontal">
+
+                <com.operit.audioviz.ChipView
+                    android:id="@+id/ui0"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1" />
+
+                <com.operit.audioviz.ChipView
+                    android:id="@+id/ui1"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginLeft="8dp"
+                    android:layout_weight="1" />
+
+                <com.operit.audioviz.ChipView
+                    android:id="@+id/ui2"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginLeft="8dp"
+                    android:layout_weight="1" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:lineSpacingExtra="4dp"
+            android:tag="hint"
+            android:text="说明：系统音频依赖 Android 10+ 的音频回放捕获。Android 14 起系统会询问监听范围（整个屏幕或单个应用）；若目标应用声明禁止被录制（多数音乐 App 默认如此），系统层面不会输出音频，此时请改用麦克风模式并外放。悬浮窗可拖动，双击切换模式。"
+            android:textColor="#FF5C6580"
+            android:textSize="10sp" />
+    </LinearLayout>
+</ScrollView>

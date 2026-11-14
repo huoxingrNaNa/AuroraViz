@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Aurora Viz</string>
+    <string name="notif_channel">可视化运行中</string>
+    <color name="bg_deep">#F505060C</color>
+    <color name="text_primary">#FFF2F5FF</color>
+    <color name="text_secondary">#FF8A93B2</color>
+</resources>
