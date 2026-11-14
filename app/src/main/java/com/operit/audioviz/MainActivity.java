@@ -51,9 +51,13 @@ public class MainActivity extends Activity {
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
     private GradientButton btnToggle;
     private GhostButton btnAuth;
+    private GhostButton btnRecord;
+    private final VideoRecorder recorder = new VideoRecorder();
     private SeekBar seekSize;
     private SeekBar seekSens;
     private Switch swOverlay;
+    private SeekBar seekAlpha;
+    private Switch swBare;
     private boolean suppressOverlay = false;
     private Switch swIdle;
 
@@ -144,9 +148,12 @@ public class MainActivity extends Activity {
         diag = findViewById(R.id.diag);
         btnToggle = findViewById(R.id.btnToggle);
         btnAuth = findViewById(R.id.btnAuth);
+        btnRecord = findViewById(R.id.btnRecord);
         seekSize = findViewById(R.id.seekSize);
         seekSens = findViewById(R.id.seekSens);
         swOverlay = findViewById(R.id.swOverlay);
+        seekAlpha = findViewById(R.id.seekAlpha);
+        swBare = findViewById(R.id.swBare);
         swIdle = findViewById(R.id.swIdle);
 
         chipMic = findViewById(R.id.chipMic);
@@ -279,6 +286,22 @@ public class MainActivity extends Activity {
             }
         });
 
+        seekAlpha.setMax(100);
+        seekAlpha.setProgress(alphaToProgress(Prefs.alpha(this)));
+        seekAlpha.setOnSeekBarChangeListener(new SimpleSeekListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                Prefs.setAlpha(MainActivity.this, progressToAlpha(progress));
+                syncOverlay();
+            }
+        });
+
+        swBare.setChecked(Prefs.bare(this));
+        swBare.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            Prefs.setBare(MainActivity.this, isChecked);
+            syncOverlay();
+        });
+
         seekSens.setMax(100);
         seekSens.setProgress(sensToProgress(Prefs.sens(this)));
         seekSens.setOnSeekBarChangeListener(new SimpleSeekListener() {
@@ -291,6 +314,8 @@ public class MainActivity extends Activity {
         });
 
         btnAuth.setOnClickListener(v -> onAuthClick());
+        btnRecord.setLabel("导出可视化视频（15 秒）");
+        btnRecord.setOnClickListener(v -> onRecordClick());
         btnToggle.setOnClickListener(v -> onToggle());
 
         ShizukuHelper.addPermissionListener(shizukuListener);
@@ -332,6 +357,10 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        try {
+            recorder.stop();
+        } catch (Throwable ignored) {
+        }
         try {
             unregisterReceiver(receiver);
         } catch (Exception ignored) {
@@ -407,6 +436,14 @@ public class MainActivity extends Activity {
         });
     }
 
+    private static int alphaToProgress(float a) {
+        return Math.round((a - 0.25f) / 0.75f * 100f);
+    }
+
+    private static float progressToAlpha(int p) {
+        return 0.25f + 0.75f * (p / 100f);
+    }
+
     private void applySelections() {
         Palette p = Palette.byIndex(paletteIdx);
         Style s = Style.byIndex(styleIdx);
@@ -418,6 +455,7 @@ public class MainActivity extends Activity {
         preview.setShowModeLabel(true);
         btnToggle.setPalette(p);
         btnAuth.setPalette(p);
+        btnRecord.setPalette(p);
         chipMic.setPalette(p);
         chipSys.setPalette(p);
         for (ChipView c : uiChips) c.setPalette(p);
@@ -443,6 +481,8 @@ public class MainActivity extends Activity {
 
         ColorStateList tint = ColorStateList.valueOf(sc2);
         seekSize.setProgressTintList(tint);
+        seekAlpha.setProgressTintList(tint);
+        seekAlpha.setThumbTintList(ColorStateList.valueOf(sc1));
         seekSize.setThumbTintList(ColorStateList.valueOf(sc1));
         seekSens.setProgressTintList(tint);
         seekSens.setThumbTintList(ColorStateList.valueOf(sc1));
@@ -551,6 +591,43 @@ public class MainActivity extends Activity {
     }
 
     // ------------------------------------------------------------ Shizuku
+
+    private void onRecordClick() {
+        if (android.os.Build.VERSION.SDK_INT < 29
+                && checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(
+                    new String[]{android.Manifest.permission.WRITE_EXTERNAL_STORAGE}, 1001);
+            Toast.makeText(this, "先允许存储权限，再点一次导出", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (recorder.isRecording()) {
+            recorder.stop();
+            btnRecord.setLabel("正在收尾…");
+            return;
+        }
+        btnRecord.setLabel("录制中… " + VideoRecorder.SECONDS + "s");
+        recorder.start(this, new VideoRecorder.Callback() {
+            @Override
+            public void onProgress(int secondsLeft) {
+                btnRecord.setLabel("录制中… " + Math.max(0, secondsLeft) + "s");
+            }
+
+            @Override
+            public void onDone(String path, long bytes) {
+                btnRecord.setLabel("导出可视化视频（15 秒）");
+                String size = String.format(java.util.Locale.US, "%.1f MB", bytes / 1048576f);
+                Toast.makeText(MainActivity.this,
+                        "已保存 " + size + "\n" + path, Toast.LENGTH_LONG).show();
+            }
+
+            @Override
+            public void onError(String message) {
+                btnRecord.setLabel("导出可视化视频（15 秒）");
+                Toast.makeText(MainActivity.this, "录制失败：" + message, Toast.LENGTH_LONG).show();
+            }
+        });
+    }
 
     private void onAuthClick() {
         if (!ShizukuHelper.isAvailable()) {

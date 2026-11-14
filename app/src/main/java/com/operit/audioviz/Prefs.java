@@ -19,6 +19,10 @@ public final class Prefs {
     private static final String K_C1 = "custom_c1";
     private static final String K_C2 = "custom_c2";
     private static final String K_IDLE = "idle_anim";
+    private static final String K_ALPHA = "overlay_alpha";
+    private static final String K_BARE = "overlay_bare";
+    private static final String K_POSX = "overlay_x";
+    private static final String K_POSY = "overlay_y";
 
     public static final int SOURCE_MIC = 0;
     public static final int SOURCE_SYSTEM = 1;
@@ -114,6 +118,37 @@ public final class Prefs {
 
     public static void setIdleAnim(Context c, boolean v) {
         sp(c).edit().putBoolean(K_IDLE, v).apply();
+    }
+
+    /** 悬浮窗不透明度 0.25f ~ 1.0f */
+    public static float alpha(Context c) {
+        return sp(c).getFloat(K_ALPHA, 1.0f);
+    }
+
+    public static void setAlpha(Context c, float v) {
+        sp(c).edit().putFloat(K_ALPHA, v).apply();
+    }
+
+    /** 透明背景：不画卡片底色，只留波形 */
+    public static boolean bare(Context c) {
+        return sp(c).getBoolean(K_BARE, false);
+    }
+
+    public static void setBare(Context c, boolean v) {
+        sp(c).edit().putBoolean(K_BARE, v).apply();
+    }
+
+    /** 悬浮窗记住的位置（MIN_VALUE 表示未设置） */
+    public static int posX(Context c) {
+        return sp(c).getInt(K_POSX, Integer.MIN_VALUE);
+    }
+
+    public static int posY(Context c) {
+        return sp(c).getInt(K_POSY, Integer.MIN_VALUE);
+    }
+
+    public static void setPos(Context c, int x, int y) {
+        sp(c).edit().putInt(K_POSX, x).putInt(K_POSY, y).apply();
     }
 
     public static void setCustomColors(Context c, int c0, int c1, int c2) {

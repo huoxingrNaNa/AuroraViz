@@ -67,6 +67,12 @@ public class OverlayService extends Service {
     private float downRawX, downRawY;
     private int startX, startY;
     private long lastTapAt = 0L;
+    private boolean dragMoved = false;
+    private float pinchStartDist = 0f;
+    private int pinchStartW = 0, pinchStartH = 0;
+    private final Runnable longPressHide = () -> {
+        if (!dragMoved) hideOverlayKeepRunning();
+    };
 
     @Override
     public void onCreate() {
@@ -89,15 +95,23 @@ public class OverlayService extends Service {
             boolean wantOverlay = intent.getBooleanExtra(EXTRA_SHOW_OVERLAY,
                     Prefs.overlayEnabled(this));
             Prefs.setOverlayEnabled(this, wantOverlay);
+            if (wantOverlay && overlayView != null && params != null) {
+                params.alpha = Prefs.alpha(this);
+                if (viz != null) viz.setDrawBackground(!Prefs.bare(this));
+                try {
+                    wm.updateViewLayout(overlayView, params);
+                } catch (Exception ignored) {
+                }
+            }
             if (wantOverlay) {
                 if (overlayView == null) {
                     showOverlay();
                 } else if (viz != null) {
                     viz.setStyle(Style.byIndex(Prefs.style(this)));
                     viz.setPalette(Palette.byIndex(Prefs.palette(this)));
+                    viz.setDrawBackground(!Prefs.bare(this));
                     viz.setPeakMode(Prefs.peakGlow(this));
                     viz.setIdleAnim(Prefs.idleAnim(this));
-        viz.setIdleAnim(Prefs.idleAnim(this));
                 }
             } else {
                 hideOverlay();
@@ -323,7 +337,7 @@ public class OverlayService extends Service {
 
         overlayView = new FrameLayout(this);
         viz = new VisualizerView(this);
-        viz.setDrawBackground(true);
+        viz.setDrawBackground(!Prefs.bare(this));
         viz.setShowModeLabel(true);
         viz.setPeakMode(Prefs.peakGlow(this));
         viz.setIdleAnim(Prefs.idleAnim(this));
@@ -365,8 +379,16 @@ public class OverlayService extends Service {
         params.gravity = Gravity.TOP | Gravity.START;
 
         DisplayMetrics dm = getResources().getDisplayMetrics();
-        params.x = Math.max(0, dm.widthPixels - w - dp(10));
-        params.y = Math.max(dp(80), (int) (dm.heightPixels * 0.12f));
+        params.alpha = Prefs.alpha(this);
+        int savedX = Prefs.posX(this), savedY = Prefs.posY(this);
+        if (savedX != Integer.MIN_VALUE && savedY != Integer.MIN_VALUE) {
+            // 恢复上次位置，并 clamp 在屏幕内
+            params.x = Math.max(0, Math.min(savedX, Math.max(0, dm.widthPixels - w)));
+            params.y = Math.max(0, Math.min(savedY, Math.max(0, dm.heightPixels - h)));
+        } else {
+            params.x = Math.max(0, dm.widthPixels - w - dp(10));
+            params.y = Math.max(dp(80), (int) (dm.heightPixels * 0.12f));
+        }
 
         overlayView.setOnTouchListener(this::onOverlayTouch);
 
@@ -385,11 +407,41 @@ public class OverlayService extends Service {
                 downRawY = e.getRawY();
                 startX = params.x;
                 startY = params.y;
+                dragMoved = false;
+                main.removeCallbacks(longPressHide);
+                main.postDelayed(longPressHide, 700);
+                return true;
+            case MotionEvent.ACTION_POINTER_DOWN:
+                main.removeCallbacks(longPressHide);
+                if (e.getPointerCount() >= 2) {
+                    pinchStartDist = spacing(e);
+                    pinchStartW = params.width;
+                    pinchStartH = params.height;
+                }
                 return true;
             case MotionEvent.ACTION_MOVE: {
+                if (e.getPointerCount() >= 2) {
+                    // 双指缩放：直接改变悬浮窗尺寸
+                    float d = spacing(e);
+                    if (pinchStartDist > dp(12) && d > dp(12) && pinchStartW > 0) {
+                        dragMoved = true;
+                        float k = d / pinchStartDist;
+                        int nw = (int) Math.max(dp(160), Math.min(dp(660), pinchStartW * k));
+                        int nh = (int) Math.max(dp(90), nw * 0.56f);
+                        params.width = nw;
+                        params.height = nh;
+                        try {
+                            wm.updateViewLayout(overlayView, params);
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    return true;
+                }
                 float dx = e.getRawX() - downRawX;
                 float dy = e.getRawY() - downRawY;
                 if (Math.abs(dx) > dp(3) || Math.abs(dy) > dp(3)) {
+                    dragMoved = true;
+                    main.removeCallbacks(longPressHide);
                     params.x = startX + (int) dx;
                     params.y = startY + (int) dy;
                     try {
@@ -399,10 +451,19 @@ public class OverlayService extends Service {
                 }
                 return true;
             }
+            case MotionEvent.ACTION_POINTER_UP:
+                if (pinchStartW > 0) {
+                    Prefs.setSize(this, params.width / dp(300f));
+                }
+                return true;
             case MotionEvent.ACTION_UP: {
-                float dx = Math.abs(e.getRawX() - downRawX);
-                float dy = Math.abs(e.getRawY() - downRawY);
-                if (dx < dp(6) && dy < dp(6)) {
+                main.removeCallbacks(longPressHide);
+                float adx = Math.abs(e.getRawX() - downRawX);
+                float ady = Math.abs(e.getRawY() - downRawY);
+                if (dragMoved || adx >= dp(6) || ady >= dp(6)) {
+                    // 记住位置，下次启动直接恢复
+                    Prefs.setPos(this, params.x, params.y);
+                } else {
                     long now = System.currentTimeMillis();
                     if (now - lastTapAt < 320) {
                         lastTapAt = 0;
@@ -413,11 +474,21 @@ public class OverlayService extends Service {
                 }
                 return true;
             }
+            case MotionEvent.ACTION_CANCEL:
+                main.removeCallbacks(longPressHide);
+                return true;
             default:
                 return false;
         }
     }
 
+    /** 两指间距，用于双指缩放 */
+    private float spacing(MotionEvent e) {
+        if (e.getPointerCount() < 2) return 0f;
+        float dx = e.getX(0) - e.getX(1);
+        float dy = e.getY(0) - e.getY(1);
+        return (float) Math.hypot(dx, dy);
+    }
     private void cycleStyle() {
         int next = (Prefs.style(this) + 1) % Style.count();
         Prefs.setStyle(this, next);

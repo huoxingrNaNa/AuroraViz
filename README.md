@@ -2,7 +2,7 @@
 
 Android 音频可视化应用：**悬浮窗 + 应用内双通道显示**，纯 Java 原生 Canvas 绘制，无第三方图形库。
 
-> 版本：v2.8 (versionCode 19) · minSdk 26 / targetSdk 34 · 单 APK 约 98 KB
+> 版本：v3.1 (versionCode 21) · minSdk 26 / targetSdk 34 · 单 APK 约 110 KB
 
 <img src="docs/screenshot.jpg" width="340" alt="截图">
 
@@ -33,9 +33,28 @@ Android 音频可视化应用：**悬浮窗 + 应用内双通道显示**，纯 J
 
 ### 悬浮窗
 
-- 拖动移动、双击切换模式、右上角 ✕ **只隐藏浮窗、监听继续**
-- 独立于监听的开关：可以在只在应用内看可视化
+- 拖动移动、**位置记忆**（下次启动直接回到原位，带屏幕边界 clamp）
+- 双击切换模式
+- **双指捏合缩放**浮窗尺寸（160–660 dp，松手落盘）
+- **长按隐藏**浮窗（不打断监听）
+- **透明度** 25%–100% 实时可调
+- **透明背景**：不画卡片底色，只留波形悬浮在桌面
+- 右上角 ✕ **只隐藏浮窗、监听继续**
+- 独立于监听的开关：可以只在应用内看可视化
 - 实时诊断行：`N 帧 · 电平 X dB · 静音 Y s`，用于区分「0 帧（应用禁止被录制）」与「有帧但静音」
+
+### 导出视频
+
+「导出可视化视频（15 秒）」按钮：把当前模式/配色渲染成 **MP4**，保存到公共目录：
+
+```
+/sdcard/Movies/AuroraViz/aurora_yyyyMMdd_HHmmss.mp4
+```
+
+- 规格：960×540 · 30 fps · H.264 High · 约 700 kb/s（Android 10+ 通过 MediaStore 写入，相册可见）
+- 录制中按钮显示剩余秒数，再次点击可提前结束（已录部分仍是完整可播文件）
+- 管线：独立 `VisualizerView` → `Bitmap`(Canvas) → `GlBlitter`(OpenGL ES) → `MediaCodec` 输入 Surface → `MediaMuxer`
+- 说明：MediaCodec 的输入 Surface **不能 `lockCanvas`**，必须走 GL；画面与界面上的实例分离，互不干扰
 
 ---
 
@@ -90,6 +109,8 @@ adb shell pm install -r /data/local/tmp/av.apk
 | `0 帧 · 电平 -∞ dB` | 目标应用禁止被录制（系统级拒绝） |
 | `669 帧 · 电平 -15 dB · 静音 0.0s` | 捕获正常 |
 
+**导出的视频目前不含音轨**（v3.1）。录制只走视频编码，避免与系统音频捕获争用 `MediaProjection`；后续版本会加 PCM tee + AAC 混流。
+
 ---
 
 ## 代码结构
@@ -109,7 +130,9 @@ app/src/main/java/com/operit/audioviz/
 ├── SwatchView.java          圆形主题色块
 ├── SatValView.java          HSV 色域板
 ├── HueBar.java              色相条
-└── ColorPickerDialog.java   三节点自定义调色面板
+├── ColorPickerDialog.java   三节点自定义调色面板
+├── GlBlitter.java           OpenGL ES 桥：Bitmap → MediaCodec 输入 Surface
+└── VideoRecorder.java       录制导出：独立 View → Bitmap → GL → H.264 → MP4（公共 Movies 目录）
 ```
 
 ### 一个值得记录的坑
@@ -143,6 +166,8 @@ paint.setShader(gradient);           // 渐变亮度被乘上 7.8% → 看起来
 | 2.6 | **修复 Paint alpha 与 shader 相乘导致的「按钮变黑」**（13 处加固） |
 | 2.7 | 峰值与柱共用 `pow(v,0.8)` 映射，光晕不跨柱（实测 179 点 0 异常） |
 | 2.8 | **浮窗 ✕ 只隐藏不停止监听**，开关状态双向同步 |
+| 3.0 | 浮窗增强：透明度、透明背景、位置记忆、双指缩放、长按隐藏；新增 MP4 录制导出 |
+| 3.1 | 导出目录改为公共 `Movies/AuroraViz`（MediaStore，相册可见），不再写进 `Android/data` |
 
 ---
 

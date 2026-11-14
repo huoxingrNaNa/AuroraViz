@@ -45,6 +45,8 @@ public class VisualizerView extends View {
     private int col0 = 0xFF00F5FF, col1 = 0xFF7B5CFF, col2 = 0xFFFF2ED1, glowC = 0xFF39D9FF;
     private boolean rainbow = false;
     private boolean drawBackground = false;
+    /** 自驱重绘开关：录制导出时用独立 View 手动逐帧绘制，需关掉自驱 */
+    private boolean selfDrive = true;
     private boolean showModeLabel = false;
     /** 0 发光粒子 / 1 细线 / 2 关闭 —— 与界面 chip 顺序严格一致 */
     private int peakMode = 0;
@@ -92,6 +94,11 @@ public class VisualizerView extends View {
     public void setDrawBackground(boolean enabled) {
         drawBackground = enabled;
         invalidate();
+    }
+
+    /** 录制导出时关闭自驱重绘（由录制线程手动逐帧 draw） */
+    public void setSelfDrive(boolean enabled) {
+        selfDrive = enabled;
     }
 
     public void setShowModeLabel(boolean enabled) {
@@ -196,7 +203,7 @@ public class VisualizerView extends View {
         }
 
         if (showModeLabel) drawModeLabel(canvas, w, h);
-        postInvalidateOnAnimation();
+        if (selfDrive) postInvalidateOnAnimation();
     }
 
     // ------------------------------------------------------------ 背景 / 标签 / 纵轴
