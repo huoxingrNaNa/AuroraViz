@@ -226,6 +226,31 @@ public class VideoRecorder {
                 codec.releaseOutputBuffer(idx, false);
             }
 
+            // ===== 关键顺序 =====
+            // MediaMuxer 的 moov（索引）是在 stop() 时才写入文件的。
+            // 必须先 stop/release 把 moov 落到临时文件，再拷贝到媒体库，
+            // 否则拷出去的文件只有 ftyp/free/mdat，播放器会报 moov atom not found。
+            boolean muxOk = true;
+            try {
+                muxer.stop();
+            } catch (Throwable t) {
+                muxOk = false;
+            }
+            try {
+                muxer.release();
+            } catch (Throwable ignored) {
+            }
+            muxer = null;
+            try {
+                codec.stop();
+                codec.release();
+            } catch (Throwable ignored) {
+            }
+            codec = null;
+
+            if (!muxOk) {
+                throw new IllegalStateException("封装失败（moov 未写入），请重试");
+            }
             long bytes = tmpFile.length();
             if (publishUri != null) {
                 // 拷贝到媒体库并解除 pending，时间戳让相册立即刷新

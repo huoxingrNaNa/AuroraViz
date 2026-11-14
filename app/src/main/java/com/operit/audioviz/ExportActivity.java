@@ -73,7 +73,7 @@ public class ExportActivity extends Activity {
         selectLength(0);
 
         btnStart.setOnClickListener(v -> toggleExport());
-        txtStatus.setText("选择音频后可先预览，再导出");
+        txtStatus.setText("选择音频可导入渲染；不选则直接录制当前监听画面");
     }
 
     private void pickAudio() {
@@ -118,13 +118,14 @@ public class ExportActivity extends Activity {
 
     private void updateStartLabel() {
         if (recorder.isRecording()) return;
+        String verb = uri == null ? "录制当前画面" : "开始导出";
         if (seconds > 0) {
-            btnStart.setLabel("开始导出（" + seconds + " 秒）");
+            btnStart.setLabel(verb + "（" + seconds + " 秒）");
         } else {
             long ms = player.durationMs();
             btnStart.setLabel(ms > 0
-                    ? "开始导出（整首 " + (ms / 1000) + " 秒）"
-                    : "开始导出（整首）");
+                    ? verb + "（整首 " + (ms / 1000) + " 秒）"
+                    : verb + "（60 秒）");
         }
     }
 
@@ -135,10 +136,6 @@ public class ExportActivity extends Activity {
             btnStart.setLabel("正在收尾…");
             return;
         }
-        if (!player.isPlaying() && player.durationMs() == 0 && uri == null) {
-            Toast.makeText(this, "先选择音频文件，或直接按时长录制当前画面", Toast.LENGTH_SHORT).show();
-            return;
-        }
         int sec = seconds;
         if (sec <= 0) {
             long d = player.durationMs();
@@ -146,7 +143,7 @@ public class ExportActivity extends Activity {
         }
         final int total = sec;
 
-        txtStatus.setText("准备导出…");
+        txtStatus.setText(uri == null ? "准备录制当前画面…" : "准备导出…");
         btnStart.setLabel("停止并保存");
 
         if (uri != null) {
