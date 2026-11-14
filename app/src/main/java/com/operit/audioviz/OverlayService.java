@@ -112,6 +112,8 @@ public class OverlayService extends Service {
                     viz.setDrawBackground(!Prefs.bare(this));
                     viz.setPeakMode(Prefs.peakGlow(this));
                     viz.setIdleAnim(Prefs.idleAnim(this));
+        viz.setSmoothTau(Prefs.vizSmoothTau(this));
+                    viz.setSmoothTau(Prefs.vizSmoothTau(this));
                 }
             } else {
                 hideOverlay();

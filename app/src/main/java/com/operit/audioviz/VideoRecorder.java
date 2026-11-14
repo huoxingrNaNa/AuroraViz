@@ -62,6 +62,7 @@ public class VideoRecorder {
     private int height = 720;
     private int fps = 50;
     private int bitrate = 12_000_000;
+    private float smoothTau = 26f;
     private static final int IFRAME_INTERVAL = 2;
     public static final int SECONDS = 15;
 
@@ -143,6 +144,7 @@ public class VideoRecorder {
         view.setPeakMode(Prefs.peakGlow(app));
         view.setIdleAnim(Prefs.idleAnim(app));
         view.setSelfDrive(false);
+        view.setSmoothTau(smoothTau);
         view.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
         view.layout(0, 0, width, height);
@@ -160,6 +162,11 @@ public class VideoRecorder {
         }
         if (f > 0) fps = f;
         if (b > 0) bitrate = b;
+    }
+
+    /** 可视化平滑时间常数（ms） */
+    public void setSmoothTau(float tauMs) {
+        smoothTau = tauMs;
     }
 
     public void stop() {

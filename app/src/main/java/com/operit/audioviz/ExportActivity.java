@@ -25,9 +25,9 @@ public class ExportActivity extends Activity {
     private TextView txtFile, txtInfo, txtStatus;
     private Switch swMute;
     private ChipView[] lenChips;
-    private ChipView[] resChips, fpsChips, brChips;
+    private ChipView[] resChips, fpsChips, brChips, smChips;
     private TextView txtListen;
-    private int resIdx, fpsIdx, brIdx;
+    private int resIdx, fpsIdx, brIdx, smIdx;
 
     private final FileAudioPlayer player = new FileAudioPlayer();
     private final VideoRecorder recorder = new VideoRecorder();
@@ -78,6 +78,8 @@ public class ExportActivity extends Activity {
                 findViewById(R.id.fps2)};
         brChips = new ChipView[]{findViewById(R.id.br0), findViewById(R.id.br1),
                 findViewById(R.id.br2)};
+        smChips = new ChipView[]{findViewById(R.id.sm0), findViewById(R.id.sm1),
+                findViewById(R.id.sm2)};
         txtListen = findViewById(R.id.txtListen);
         String[] resLabels = {"720p", "1080p"};
         String[] fpsLabels = {"30 fps", "50 fps", "60 fps"};
@@ -95,6 +97,13 @@ public class ExportActivity extends Activity {
             brIdx = i;
             Prefs.setRecBr(ExportActivity.this, i);
         });
+        bindChips(smChips, new String[]{"紧凑", "标准", "柔和"}, Prefs.vizSmooth(this), i -> {
+            smIdx = i;
+            Prefs.setVizSmooth(ExportActivity.this, i);
+            preview.setSmoothTau(Prefs.smoothTauOf(i));
+        });
+        smIdx = Prefs.vizSmooth(this);
+        preview.setSmoothTau(Prefs.smoothTauOf(smIdx));
         resIdx = Prefs.recRes(this);
         fpsIdx = Prefs.recFps(this);
         brIdx = Prefs.recBr(this);
@@ -158,6 +167,7 @@ public class ExportActivity extends Activity {
         int[] br = {8_000_000, 12_000_000, 20_000_000};
         recorder.setConfig(w, h, fr[Math.max(0, Math.min(2, fpsIdx))],
                 br[Math.max(0, Math.min(2, brIdx))]);
+        recorder.setSmoothTau(Prefs.smoothTauOf(smIdx));
     }
 
     /** 监听状态提示：未监听时录制只会得到待机动画 */

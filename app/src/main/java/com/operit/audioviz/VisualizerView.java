@@ -31,6 +31,13 @@ public class VisualizerView extends View {
     private final float[] hsv = new float[3];
 
     private final float[] specA = new float[AudioEngine.BANDS];
+    /** 引擎最新一帧（目标值） */
+    private final float[] specTarget = new float[AudioEngine.BANDS];
+    /** 屏幕上实际显示的值（按时间插值逼近 target，与帧率无关） */
+    private final float[] specDraw = new float[AudioEngine.BANDS];
+    private long lastDrawAtMs = 0L;
+    /** 平滑时间常数（ms）：越大越软 */
+    private float smoothTau = 26f;
     private final float[] waveA = new float[AudioEngine.WAVE_POINTS];
     private final float[] smoothWave = new float[AudioEngine.WAVE_POINTS];
     /** 峰值弹道：hold 500ms + fade 750ms（与帧率无关，时间为唯一基准） */
@@ -97,6 +104,11 @@ public class VisualizerView extends View {
     }
 
     /** 录制导出时关闭自驱重绘（由录制线程手动逐帧 draw） */
+    /** 频谱跟随的平滑程度：时间常数 ms（8=紧跟，45=很软） */
+    public void setSmoothTau(float tauMs) {
+        smoothTau = Math.max(6f, Math.min(60f, tauMs));
+    }
+
     public void setSelfDrive(boolean enabled) {
         selfDrive = enabled;
     }
@@ -129,8 +141,20 @@ public class VisualizerView extends View {
 
         final float tSec = (System.nanoTime() - bornAt) / 1_000_000_000f;
         final AudioEngine engine = AudioEngine.get();
-        engine.copySpectrum(specA);
+        engine.copySpectrum(specTarget);
         engine.copyWave(waveA);
+        // 按真实时间插值：43Hz 的数据在 60fps 下也能每帧都变化，不会出现“抽帧”
+        final long nowMs = android.os.SystemClock.uptimeMillis();
+        float dtMs = lastDrawAtMs == 0L ? 16f : (nowMs - lastDrawAtMs);
+        lastDrawAtMs = nowMs;
+        if (dtMs < 1f) dtMs = 1f;
+        if (dtMs > 80f) dtMs = 80f;
+        final float kSpec = 1f - (float) Math.exp(-dtMs / Math.max(6f, smoothTau));
+        final float kWave = 1f - (float) Math.exp(-dtMs / 16f);
+        for (int i = 0; i < specDraw.length; i++) {
+            specDraw[i] += (specTarget[i] - specDraw[i]) * kSpec;
+            specA[i] = specDraw[i];
+        }
 
         boolean active = engine.isRunning()
                 && System.currentTimeMillis() - engine.lastFrameAt() < 700;
@@ -138,11 +162,12 @@ public class VisualizerView extends View {
         float beat = active ? engine.beat() : 0f;
 
         for (int i = 0; i < smoothWave.length; i++) {
-            smoothWave[i] += (waveA[i] - smoothWave[i]) * 0.42f;
+            smoothWave[i] += (waveA[i] - smoothWave[i]) * kWave;
         }
 
         if (!active && !idleAnim) {
             java.util.Arrays.fill(specA, 0f);
+            java.util.Arrays.fill(specDraw, 0f);
             java.util.Arrays.fill(smoothWave, 0f);
             bass = 0f;
             beat = 0f;

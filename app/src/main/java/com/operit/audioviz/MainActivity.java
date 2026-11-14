@@ -190,6 +190,7 @@ public class MainActivity extends Activity {
             });
         }
         preview.setPeakMode(Prefs.peakGlow(this));
+        preview.setSmoothTau(Prefs.vizSmoothTau(this));
 
         styleIdx = Prefs.style(this);
         paletteIdx = Prefs.palette(this);

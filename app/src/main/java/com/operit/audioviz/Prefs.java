@@ -30,6 +30,7 @@ public final class Prefs {
     private static final String K_REC_RES = "rec_res";
     private static final String K_REC_FPS = "rec_fps";
     private static final String K_REC_BR = "rec_br";
+    private static final String K_SMOOTH = "viz_smooth";
 
     private Prefs() {
     }
@@ -181,5 +182,22 @@ public final class Prefs {
 
     public static void setRecBr(Context c, int v) {
         sp(c).edit().putInt(K_REC_BR, v).apply();
+    }
+
+    public static int vizSmooth(Context c) {
+        return sp(c).getInt(K_SMOOTH, 1);
+    }
+
+    public static void setVizSmooth(Context c, int v) {
+        sp(c).edit().putInt(K_SMOOTH, v).apply();
+    }
+
+    /** 平滑档位 → 时间常数(ms) */
+    public static float vizSmoothTau(Context c) {
+        return smoothTauOf(vizSmooth(c));
+    }
+
+    public static float smoothTauOf(int idx) {
+        return idx <= 0 ? 16f : idx == 1 ? 30f : 52f;
     }
 }
