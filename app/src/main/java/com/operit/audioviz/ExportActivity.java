@@ -132,7 +132,7 @@ public class ExportActivity extends Activity {
     private void toggleExport() {
         if (recorder.isRecording()) {
             recorder.stop();
-            player.stop();
+            stopAudioSources();
             btnStart.setLabel("正在收尾…");
             return;
         }
@@ -143,8 +143,20 @@ public class ExportActivity extends Activity {
         }
         final int total = sec;
 
-        txtStatus.setText(uri == null ? "准备录制当前画面…" : "准备导出…");
+        txtStatus.setText(uri == null ? "准备录制当前画面…" : "准备导出（含音轨）…");
         btnStart.setLabel("停止并保存");
+
+        // 两条路径都带音轨：
+        //  选了文件 → 用文件解码出的 PCM（与原曲同步）
+        //  没选文件 → 用当前监听的实时 PCM（麦克风 / 系统音频）
+        recorder.setAudioEnabled(true);
+        if (uri != null) {
+            AudioEngine.get().setPcmSink(null);
+            player.setPcmListener(recorder::feedPcm);
+        } else {
+            player.setPcmListener(null);
+            AudioEngine.get().setPcmSink(recorder::feedPcm);
+        }
 
         if (uri != null) {
             player.play(this, swMute.isChecked(), () -> {
@@ -159,24 +171,37 @@ public class ExportActivity extends Activity {
 
             @Override
             public void onDone(String path, long bytes) {
-                player.stop();
+                stopAudioSources();
                 btnStart.setLabel("开始导出");
                 updateStartLabel();
                 String size = String.format(Locale.US, "%.1f MB", bytes / 1048576f);
-                txtStatus.setText("已保存 " + size + "\n" + path);
+                String audio = recorder.hasAudioTrack() ? "含音轨" : "无音轨";
+                txtStatus.setText("已保存 " + size + "（" + audio + "）\n" + path);
                 Toast.makeText(ExportActivity.this,
                         "导出完成 " + size + "\n" + path, Toast.LENGTH_LONG).show();
             }
 
             @Override
             public void onError(String message) {
-                player.stop();
+                stopAudioSources();
                 btnStart.setLabel("开始导出");
                 updateStartLabel();
                 txtStatus.setText("导出失败：" + message);
                 Toast.makeText(ExportActivity.this, "导出失败：" + message, Toast.LENGTH_LONG).show();
             }
         });
+    }
+
+    private void stopAudioSources() {
+        try {
+            AudioEngine.get().setPcmSink(null);
+        } catch (Throwable ignored) {
+        }
+        try {
+            player.setPcmListener(null);
+            player.stop();
+        } catch (Throwable ignored) {
+        }
     }
 
     private String displayName(Uri u) {
@@ -206,7 +231,7 @@ public class ExportActivity extends Activity {
         } catch (Throwable ignored) {
         }
         try {
-            player.stop();
+            stopAudioSources();
         } catch (Throwable ignored) {
         }
         super.onDestroy();

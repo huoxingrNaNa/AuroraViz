@@ -24,7 +24,7 @@ public final class AudioEngine {
     public static final int BANDS = 48;
     public static final int WAVE_POINTS = 192;
     public static final int SAMPLE_RATE = 44100;
-    private static final int FFT_SIZE = 2048;
+    private static final int FFT_SIZE = 1024;
     private static final float MIN_FREQ = 40f;
     private static final float MAX_FREQ = 16000f;
 
@@ -43,6 +43,8 @@ public final class AudioEngine {
 
     private volatile boolean running;
     private volatile boolean fileMode;
+    private volatile PcmSink pcmSink;
+    private volatile int captureChannels = 1;
     private volatile boolean alive;
     private volatile float level;
     private volatile float bass;
@@ -75,6 +77,15 @@ public final class AudioEngine {
 
     private final float[] fileRe = new float[FFT_SIZE];
     private final float[] fileIm = new float[FFT_SIZE];
+
+    /** 采集 PCM 出口：录制当前监听画面时用来编码音轨 */
+    public interface PcmSink {
+        void onPcm(short[] pcm, int length, int sampleRate, int channels);
+    }
+
+    public void setPcmSink(PcmSink sink) {
+        pcmSink = sink;
+    }
 
     /** 进入文件播放模式（让 visualize 认为有实时数据） */
     public void enterFileMode() {
@@ -131,24 +142,8 @@ public final class AudioEngine {
             return false;
         }
         stop();
-        AudioFormat fmt = new AudioFormat.Builder()
-                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                .setSampleRate(SAMPLE_RATE)
-                .setChannelMask(AudioFormat.CHANNEL_IN_MONO)
-                .build();
-        int minBuf = AudioRecord.getMinBufferSize(SAMPLE_RATE,
-                AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
-        if (minBuf <= 0) minBuf = 8192;
-        try {
-            record = new AudioRecord.Builder()
-                    .setAudioSource(MediaRecorder.AudioSource.MIC)
-                    .setAudioFormat(fmt)
-                    .setBufferSizeInBytes(minBuf * 2)
-                    .build();
-        } catch (Exception e) {
-            record = null;
-            return false;
-        }
+        record = createRecord(MediaRecorder.AudioSource.MIC, null);
+        if (record == null) return false;
         return begin();
     }
 
@@ -164,25 +159,45 @@ public final class AudioEngine {
                         .addMatchingUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
                         .addMatchingUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
                         .build();
-        AudioFormat fmt = new AudioFormat.Builder()
-                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                .setSampleRate(SAMPLE_RATE)
-                .setChannelMask(AudioFormat.CHANNEL_IN_MONO)
-                .build();
-        int minBuf = AudioRecord.getMinBufferSize(SAMPLE_RATE,
-                AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
-        if (minBuf <= 0) minBuf = 8192;
-        try {
-            record = new AudioRecord.Builder()
-                    .setAudioFormat(fmt)
-                    .setBufferSizeInBytes(minBuf * 2)
-                    .setAudioPlaybackCaptureConfig(config)
-                    .build();
-        } catch (Exception e) {
-            record = null;
-            return false;
-        }
+        record = createRecord(0, config);
+        if (record == null) return false;
         return begin();
+    }
+
+    /**
+     * 优先以立体声采集（音轨更接近原声），设备/来源不支持时自动回退单声道。
+     */
+    private AudioRecord createRecord(int audioSource, AudioPlaybackCaptureConfiguration config) {
+        int[] masks = new int[]{AudioFormat.CHANNEL_IN_STEREO, AudioFormat.CHANNEL_IN_MONO};
+        for (int mask : masks) {
+            int ch = mask == AudioFormat.CHANNEL_IN_STEREO ? 2 : 1;
+            int minBuf = AudioRecord.getMinBufferSize(SAMPLE_RATE, mask,
+                    AudioFormat.ENCODING_PCM_16BIT);
+            if (minBuf <= 0) continue;
+            AudioFormat fmt = new AudioFormat.Builder()
+                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                    .setSampleRate(SAMPLE_RATE)
+                    .setChannelMask(mask)
+                    .build();
+            try {
+                AudioRecord.Builder b = new AudioRecord.Builder()
+                        .setAudioFormat(fmt)
+                        .setBufferSizeInBytes(minBuf * 2);
+                if (config != null) {
+                    b.setAudioPlaybackCaptureConfig(config);
+                } else {
+                    b.setAudioSource(audioSource);
+                }
+                AudioRecord r = b.build();
+                if (r != null && r.getState() == AudioRecord.STATE_INITIALIZED) {
+                    captureChannels = ch;
+                    return r;
+                }
+                if (r != null) r.release();
+            } catch (Exception ignored) {
+            }
+        }
+        return null;
     }
 
     private boolean begin() {
@@ -217,13 +232,15 @@ public final class AudioEngine {
 
     private void loop() {
         Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO);
-        short[] buf = new short[FFT_SIZE];
+        final int ch = Math.max(1, captureChannels);
+        short[] buf = new short[FFT_SIZE * ch];
+        short[] mono = ch > 1 ? new short[FFT_SIZE] : null;
         float[] re = new float[FFT_SIZE];
         float[] im = new float[FFT_SIZE];
         while (running) {
             int n;
             try {
-                n = record.read(buf, 0, FFT_SIZE);
+                n = record.read(buf, 0, buf.length);
             } catch (Exception e) {
                 break;
             }
@@ -235,9 +252,27 @@ public final class AudioEngine {
                 }
                 continue;
             }
+            int framesRead = n / ch;
+            if (framesRead <= 0) continue;
+            short[] forFft = buf;
+            if (ch > 1) {
+                for (int i = 0; i < framesRead; i++) {
+                    int sum = 0;
+                    for (int c = 0; c < ch; c++) sum += buf[i * ch + c];
+                    mono[i] = (short) (sum / ch);
+                }
+                forFft = mono;
+            }
             try {
-                analyze(buf, n, re, im, SAMPLE_RATE);
+                analyze(forFft, framesRead, re, im, SAMPLE_RATE);
             } catch (Exception ignored) {
+            }
+            PcmSink sink = pcmSink;
+            if (sink != null) {
+                try {
+                    sink.onPcm(buf, framesRead * ch, SAMPLE_RATE, ch);
+                } catch (Throwable ignored) {
+                }
             }
         }
         alive = false;

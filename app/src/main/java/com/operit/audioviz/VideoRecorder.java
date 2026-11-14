@@ -2,9 +2,6 @@ package com.operit.audioviz;
 
 import android.content.ContentValues;
 import android.content.Context;
-import android.net.Uri;
-import android.os.Build;
-import android.provider.MediaStore;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.PorterDuff;
@@ -12,7 +9,10 @@ import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaFormat;
 import android.media.MediaMuxer;
+import android.net.Uri;
+import android.os.Build;
 import android.os.Environment;
+import android.provider.MediaStore;
 import android.view.Surface;
 import android.view.View;
 
@@ -28,10 +28,27 @@ import java.util.Locale;
 /**
  * 把 VisualizerView 的画面录制为 MP4（H.264）。
  *
- * 流程：独立 VisualizerView → Bitmap(Canvas) → GlBlitter(OpenGL) → MediaCodec input Surface
- * → MediaMuxer。使用独立 View 实例，避免与界面上的实例并发绘制。
+ * 音频：调用方（导出页面）通过 {@link #setAudioEnabled(boolean)} 声明要带音轨，
+ * 并在播放音频文件时把解码出的 PCM 交给 {@link #feedPcm}，
+ * 内部用 {@link AacEncoder} 编成 AAC 一起混流。
+ *
+ * 管线：独立 VisualizerView → Bitmap(Canvas) → GlBlitter(GL) → MediaCodec
+ *      → MediaMuxer（视频轨 + 可选音频轨）→ 公共 Movies 目录
  */
 public class VideoRecorder {
+
+    /** 一段待编码的 PCM（含采样率/声道，随块传递） */
+    private static final class PcmBlock {
+        final short[] data;
+        final int sampleRate;
+        final int channels;
+
+        PcmBlock(short[] data, int sampleRate, int channels) {
+            this.data = data;
+            this.sampleRate = sampleRate;
+            this.channels = channels;
+        }
+    }
     public interface Callback {
         void onProgress(int secondsLeft);
 
@@ -40,20 +57,55 @@ public class VideoRecorder {
         void onError(String message);
     }
 
-    public static final int WIDTH = 960;
-    public static final int HEIGHT = 540;
+    public static final int WIDTH = 1280;
+    public static final int HEIGHT = 720;
     private static final int FPS = 30;
-    private static final int BITRATE = 6_000_000;
+    private static final int BITRATE = 12_000_000;
     private static final int IFRAME_INTERVAL = 1;
-    /** 默认录制时长（秒），ExportActivity 可传入自定义值 */
     public static final int SECONDS = 15;
 
     private volatile boolean running = false;
     private volatile boolean stopRequested = false;
     private Thread thread;
 
+    private int seconds = SECONDS;
+
+    // ---- 音频（由音频播放线程调用 feedPcm）----
+    private volatile boolean audioEnabled = false;
+    private volatile boolean audioFailed = false;
+    private volatile AacEncoder aac;
+    /** 待编码 PCM 队列：采集线程只入队，编码在独立线程完成，避免拖慢采集 */
+    private final java.util.ArrayDeque<PcmBlock> aQ = new java.util.ArrayDeque<>();
+    private Thread aThread;
+    private volatile boolean aThreadStop = false;
+    private static final int AQ_MAX = 96;
+    private int aSampleRate = 44100;
+    private int aChannels = 2;
+    private long aMaxFrameSamples = 0;   // 每声道总样本上限（= 时长 * 采样率）
+    private long aFramesFed = 0;
+
+    // ---- mux 共享状态（视频线程 & 音频线程都会碰）----
+    private final Object muxLock = new Object();
+    private MediaMuxer muxer;
+    private MediaFormat videoFormat;
+    private MediaFormat audioFormat;
+    private int videoTrack = -1;
+    private int audioTrack = -1;
+    private boolean muxStarted = false;
+    private volatile boolean audioTrackWritten = false;
+
     public boolean isRecording() {
         return running;
+    }
+
+    /** 本次录制是否真的写入了音轨（录制结束后有效） */
+    public boolean hasAudioTrack() {
+        return audioTrackWritten;
+    }
+
+    /** 是否把音频混进 MP4（需配合 feedPcm 使用） */
+    public void setAudioEnabled(boolean enabled) {
+        audioEnabled = enabled;
     }
 
     public void start(final Context ctx, final Callback cb) {
@@ -64,6 +116,22 @@ public class VideoRecorder {
         if (running) return;
         running = true;
         stopRequested = false;
+        this.seconds = Math.max(1, seconds);
+        audioFailed = false;
+        aac = null;
+        aThreadStop = false;
+        synchronized (aQ) {
+            aQ.clear();
+            aThread = null;
+        }
+        aFramesFed = 0;
+        audioFormat = null;
+        audioTrack = -1;
+        videoFormat = null;
+        videoTrack = -1;
+        muxStarted = false;
+        muxer = null;
+
         final Context app = ctx.getApplicationContext();
         // 在主线程创建离屏 View（View 构造依赖 Looper 相关设施）
         final VisualizerView view = new VisualizerView(app);
@@ -78,7 +146,7 @@ public class VideoRecorder {
                 View.MeasureSpec.makeMeasureSpec(HEIGHT, View.MeasureSpec.EXACTLY));
         view.layout(0, 0, WIDTH, HEIGHT);
         final Bitmap bmp = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888);
-        thread = new Thread(() -> record(app, cb, view, bmp, seconds), "AuroraRecorder");
+        thread = new Thread(() -> record(app, cb, view, bmp, this.seconds), "AuroraRecorder");
         thread.setPriority(Thread.NORM_PRIORITY + 1);
         thread.start();
     }
@@ -87,9 +155,104 @@ public class VideoRecorder {
         stopRequested = true;
     }
 
+    /**
+     * 由音频播放线程调用：喂入解码出的 PCM16（交错）。
+     * 首次调用时才创建 AAC 编码器（用实际采样率/声道）。
+     */
+    public void feedPcm(short[] pcm, int len, int sampleRate, int channels) {
+        if (!running || !audioEnabled || audioFailed || pcm == null || len <= 0) return;
+        if (stopRequested) return;
+        short[] copy = new short[len];
+        System.arraycopy(pcm, 0, copy, 0, len);
+        synchronized (aQ) {
+            aQ.addLast(new PcmBlock(copy, sampleRate, channels));
+            while (aQ.size() > AQ_MAX) aQ.removeFirst();
+            if (aThread == null) {
+                aThread = new Thread(this::audioLoop, "aurora-aac");
+                aThread.start();
+            }
+            aQ.notifyAll();
+        }
+    }
+
+    /** 音频编码线程：串行消费队列，不占用采集线程 */
+    private void audioLoop() {
+        while (true) {
+            PcmBlock block;
+            synchronized (aQ) {
+                while (aQ.isEmpty() && !aThreadStop && running && !stopRequested) {
+                    try {
+                        aQ.wait(120);
+                    } catch (InterruptedException ignored) {
+                    }
+                }
+                if (aQ.isEmpty() && (aThreadStop || !running || stopRequested)) return;
+                block = aQ.pollFirst();
+            }
+            if (block == null) continue;
+            try {
+                encodeBlock(block.data, block.data.length, block.sampleRate, block.channels);
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
+    private void encodeBlock(short[] pcm, int len, int sampleRate, int channels) {
+        if (!running && !aThreadStop) return;
+        if (audioFailed || pcm == null || len <= 0) return;
+        try {
+            if (aac == null) {
+                aSampleRate = sampleRate > 0 ? sampleRate : 44100;
+                aChannels = Math.max(1, channels);
+                aMaxFrameSamples = (long) seconds * aSampleRate;
+                final AacEncoder enc = new AacEncoder(new AacEncoder.Sink() {
+                    @Override
+                    public void onFormat(MediaFormat format) {
+                        synchronized (muxLock) {
+                            audioFormat = format;
+                            maybeStartLocked();
+                            muxLock.notifyAll();
+                        }
+                    }
+
+                    @Override
+                    public void onData(ByteBuffer data, MediaCodec.BufferInfo info) {
+                        synchronized (muxLock) {
+                            if (!muxStarted || audioTrack < 0 || muxer == null) return;
+                            try {
+                                data.position(info.offset);
+                                data.limit(info.offset + info.size);
+                                muxer.writeSampleData(audioTrack, data, info);
+                            } catch (Throwable ignored) {
+                            }
+                        }
+                    }
+                }, aSampleRate, aChannels);
+                if (!enc.start()) {
+                    audioFailed = true;
+                    android.util.Log.w("AuroraRec", "AAC encoder start failed");
+                    return;
+                }
+                android.util.Log.i("AuroraRec", "AAC encoder started: " + aSampleRate + "Hz "
+                        + aChannels + "ch");
+                aac = enc;
+            }
+            long remain = aMaxFrameSamples - aFramesFed;
+            if (remain <= 0) return;
+            int frames = len / aChannels;
+            if (frames > remain) frames = (int) remain;
+            if (frames <= 0) return;
+            aac.feed(pcm, frames * aChannels);
+            aFramesFed += frames;
+        } catch (Throwable t) {
+            audioFailed = true;
+        }
+    }
+
+    // ---------------------------------------------------------------- 录制主流程
+
     private void record(Context ctx, Callback cb, final VisualizerView view, Bitmap bitmap, int seconds) {
         MediaCodec codec = null;
-        MediaMuxer muxer = null;
         GlBlitter blitter = null;
         String outPath = null;
         File tmpFile = null;
@@ -102,8 +265,7 @@ public class VideoRecorder {
                 ContentValues cv = new ContentValues();
                 cv.put(MediaStore.Video.Media.DISPLAY_NAME, name);
                 cv.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
-                cv.put(MediaStore.Video.Media.RELATIVE_PATH,
-                        Environment.DIRECTORY_MOVIES + "/AuroraViz");
+                cv.put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/AuroraViz");
                 cv.put(MediaStore.Video.Media.IS_PENDING, 1);
                 publishUri = ctx.getContentResolver()
                         .insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, cv);
@@ -122,10 +284,9 @@ public class VideoRecorder {
                 outPath = tmpFile.getAbsolutePath();
             }
 
-            // ---- 离屏渲染目标（View/Bitmap 由 start() 在主线程创建）----
             Canvas canvas = new Canvas(bitmap);
 
-            // ---- 编码器 ----
+            // ---- 视频编码器 ----
             MediaFormat format = MediaFormat.createVideoFormat("video/avc", WIDTH, HEIGHT);
             format.setInteger(MediaFormat.KEY_COLOR_FORMAT,
                     MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
@@ -142,16 +303,46 @@ public class VideoRecorder {
                 throw new IllegalStateException("OpenGL 初始化失败，无法录制");
             }
 
-            muxer = new MediaMuxer(tmpFile.getAbsolutePath(), MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
-            MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
-            int videoTrack = -1;
-            boolean muxStarted = false;
+            muxer = new MediaMuxer(tmpFile.getAbsolutePath(),
+                    MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
 
-            final int total = Math.max(1, seconds) * FPS;
+            // 若启用音轨，稍等首块 PCM 与 AAC 格式就绪（最多 1.2s），避免音轨缺失
+            if (audioEnabled) {
+                long deadline = System.currentTimeMillis() + 600;
+                while (aac == null && !audioFailed && !stopRequested
+                        && System.currentTimeMillis() < deadline) {
+                    try {
+                        Thread.sleep(20);
+                    } catch (InterruptedException ignored) {
+                    }
+                }
+                if (aac == null) {
+                    audioFailed = true;
+                } else {
+                    deadline = System.currentTimeMillis() + 600;
+                    synchronized (muxLock) {
+                        while (audioFormat == null && !audioFailed && !stopRequested) {
+                            long left = deadline - System.currentTimeMillis();
+                            if (left <= 0) break;
+                            try {
+                                muxLock.wait(Math.min(50, left));
+                            } catch (InterruptedException ignored) {
+                            }
+                        }
+                    }
+                    if (audioFormat == null) {
+                        audioFailed = true;
+                        android.util.Log.w("AuroraRec", "no AAC format in time, fallback to video-only");
+                    }
+                }
+            }
+
+            final MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
+            final int total = seconds * FPS;
             final long frameNs = 1_000_000_000L / FPS;
             final long baseNs = System.nanoTime();
             int frame = 0;
-            int lastReported = Math.max(1, seconds);
+            int lastReported = seconds;
 
             while (!stopRequested && frame < total) {
                 long target = baseNs + frame * frameNs;
@@ -162,34 +353,22 @@ public class VideoRecorder {
                     } catch (InterruptedException ignored) {
                     }
                 }
-                // 绘制到 bitmap
                 canvas.drawColor(0, PorterDuff.Mode.CLEAR);
                 view.draw(canvas);
                 blitter.draw(bitmap, frame * frameNs);
 
-                // 排空编码器
-                while (true) {
-                    int idx = codec.dequeueOutputBuffer(info, 0);
-                    if (idx == MediaCodec.INFO_TRY_AGAIN_LATER) break;
-                    if (idx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-                        videoTrack = muxer.addTrack(codec.getOutputFormat());
-                        muxer.start();
-                        muxStarted = true;
-                        continue;
+                drainVideo(codec, info);
+
+                // 迟迟拿不到音频格式就降级为纯视频，避免无限等待
+                if (audioEnabled && !audioFailed && videoTrack < 0 && frame > FPS) {
+                    audioFailed = true;
+                    synchronized (muxLock) {
+                        maybeStartLocked();
                     }
-                    if (idx < 0) continue;
-                    ByteBuffer buf = codec.getOutputBuffer(idx);
-                    if (buf != null && (info.flags & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) == 0
-                            && info.size > 0 && muxStarted) {
-                        buf.position(info.offset);
-                        buf.limit(info.offset + info.size);
-                        muxer.writeSampleData(videoTrack, buf, info);
-                    }
-                    codec.releaseOutputBuffer(idx, false);
                 }
 
                 frame++;
-                int left = Math.max(1, seconds) - frame / FPS;
+                int left = seconds - frame / FPS;
                 if (left != lastReported) {
                     lastReported = left;
                     final int l = left;
@@ -197,17 +376,40 @@ public class VideoRecorder {
                 }
             }
 
-            // ---- 收尾 ----
+            // ---- 收尾：先音轨、再视频 EOS、最后写 moov ----
+            android.util.Log.i("AuroraRec", "record stop: frames=" + frame
+                    + " audioEnabled=" + audioEnabled + " audioFailed=" + audioFailed
+                    + " muxStarted=" + muxStarted + " audioTrack=" + audioTrack);
+            // 先让音频线程把队列消化完，再发 EOS，避免丢失最后一段声音
+            synchronized (aQ) {
+                aThreadStop = true;
+                aQ.notifyAll();
+            }
+            Thread at = aThread;
+            if (at != null) {
+                try {
+                    at.join(900);
+                } catch (InterruptedException ignored) {
+                }
+            }
+            AacEncoder enc = aac;
+            if (enc != null && !audioFailed) {
+                try {
+                    enc.finish();
+                } catch (Throwable ignored) {
+                }
+            }
+
             codec.signalEndOfInputStream();
             long deadline = System.currentTimeMillis() + 1500;
             boolean eos = false;
             while (!eos) {
                 int idx = codec.dequeueOutputBuffer(info, 200_000);
                 if (idx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-                    if (!muxStarted) {
-                        videoTrack = muxer.addTrack(codec.getOutputFormat());
-                        muxer.start();
-                        muxStarted = true;
+                    synchronized (muxLock) {
+                        videoFormat = codec.getOutputFormat();
+                        maybeStartLocked();
+                        muxLock.notifyAll();
                     }
                     continue;
                 }
@@ -216,20 +418,25 @@ public class VideoRecorder {
                     continue;
                 }
                 ByteBuffer buf = codec.getOutputBuffer(idx);
-                if (buf != null && info.size > 0 && muxStarted
+                if (buf != null && info.size > 0
                         && (info.flags & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) == 0) {
-                    buf.position(info.offset);
-                    buf.limit(info.offset + info.size);
-                    muxer.writeSampleData(videoTrack, buf, info);
+                    synchronized (muxLock) {
+                        if (muxStarted && videoTrack >= 0 && muxer != null) {
+                            try {
+                                buf.position(info.offset);
+                                buf.limit(info.offset + info.size);
+                                muxer.writeSampleData(videoTrack, buf, info);
+                            } catch (Throwable ignored) {
+                            }
+                        }
+                    }
                 }
                 if ((info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) eos = true;
                 codec.releaseOutputBuffer(idx, false);
             }
 
-            // ===== 关键顺序 =====
-            // MediaMuxer 的 moov（索引）是在 stop() 时才写入文件的。
-            // 必须先 stop/release 把 moov 落到临时文件，再拷贝到媒体库，
-            // 否则拷出去的文件只有 ftyp/free/mdat，播放器会报 moov atom not found。
+            // MediaMuxer 的 moov（索引）在 stop() 时才写盘：
+            // 必须先 stop/release 把 moov 落到临时文件，再拷贝到媒体库。
             boolean muxOk = true;
             try {
                 muxer.stop();
@@ -251,9 +458,9 @@ public class VideoRecorder {
             if (!muxOk) {
                 throw new IllegalStateException("封装失败（moov 未写入），请重试");
             }
+
             long bytes = tmpFile.length();
             if (publishUri != null) {
-                // 拷贝到媒体库并解除 pending，时间戳让相册立即刷新
                 InputStream in = null;
                 OutputStream os = null;
                 try {
@@ -290,26 +497,39 @@ public class VideoRecorder {
                     + (t.getMessage() == null ? "录制失败" : t.getMessage());
             post(() -> cb.onError(msg));
         } finally {
-            try {
-                if (blitter != null) blitter.release();
-            } catch (Throwable ignored) {
+            AacEncoder enc = aac;
+            aac = null;
+            if (enc != null) {
+                try {
+                    enc.release();
+                } catch (Throwable ignored) {
+                }
             }
-            try {
-                if (codec != null) {
+            if (blitter != null) {
+                try {
+                    blitter.release();
+                } catch (Throwable ignored) {
+                }
+            }
+            if (codec != null) {
+                try {
                     codec.stop();
                     codec.release();
+                } catch (Throwable ignored) {
                 }
-            } catch (Throwable ignored) {
             }
-            try {
-                if (muxer != null) muxer.stop();
-            } catch (Throwable ignored) {
+            MediaMuxer m = muxer;
+            muxer = null;
+            if (m != null) {
+                try {
+                    m.stop();
+                } catch (Throwable ignored) {
+                }
+                try {
+                    m.release();
+                } catch (Throwable ignored) {
+                }
             }
-            try {
-                if (muxer != null) muxer.release();
-            } catch (Throwable ignored) {
-            }
-            // 失败时清掉临时文件与媒体库里未完成的条目
             try {
                 if (tmpFile != null) tmpFile.delete();
             } catch (Throwable ignored) {
@@ -321,7 +541,76 @@ public class VideoRecorder {
             } catch (Throwable ignored) {
             }
             if (bitmap != null) bitmap.recycle();
+            muxStarted = false;
             running = false;
+        }
+    }
+
+    /** 视频轨 drain（非阻塞），格式就绪后尝试开 muxer */
+    private void drainVideo(MediaCodec codec, MediaCodec.BufferInfo info) {
+        int guard = 0;
+        while (guard++ < 60) {
+            int idx;
+            try {
+                idx = codec.dequeueOutputBuffer(info, 0);
+            } catch (RuntimeException e) {
+                return;
+            }
+            if (idx == MediaCodec.INFO_TRY_AGAIN_LATER) return;
+            if (idx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                synchronized (muxLock) {
+                    videoFormat = codec.getOutputFormat();
+                    maybeStartLocked();
+                    muxLock.notifyAll();
+                }
+                continue;
+            }
+            if (idx < 0) continue;
+            ByteBuffer buf = codec.getOutputBuffer(idx);
+            if (buf != null && info.size > 0
+                    && (info.flags & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) == 0) {
+                synchronized (muxLock) {
+                    if (muxStarted && videoTrack >= 0 && muxer != null) {
+                        try {
+                            buf.position(info.offset);
+                            buf.limit(info.offset + info.size);
+                            muxer.writeSampleData(videoTrack, buf, info);
+                        } catch (Throwable ignored) {
+                        }
+                    }
+                }
+            }
+            codec.releaseOutputBuffer(idx, false);
+        }
+    }
+
+    /** 两条轨的格式都齐了才 start；调用方必须持有 muxLock */
+    private void maybeStartLocked() {
+        if (muxStarted || muxer == null || videoFormat == null) return;
+        boolean wantAudio = audioEnabled && !audioFailed && aac != null;
+        if (wantAudio && audioFormat == null) return;
+        if (videoTrack < 0) {
+            try {
+                videoTrack = muxer.addTrack(videoFormat);
+            } catch (Throwable ignored) {
+                return;
+            }
+        }
+        if (audioFormat != null && audioTrack < 0) {
+            try {
+                audioTrack = muxer.addTrack(audioFormat);
+            } catch (Throwable ignored) {
+                audioTrack = -1;
+            }
+        }
+        try {
+            muxer.start();
+            muxStarted = true;
+            audioTrackWritten = audioTrack >= 0;
+            android.util.Log.i("AuroraRec",
+                    "muxer started: videoTrack=" + videoTrack + " audioTrack=" + audioTrack
+                            + " audioEnabled=" + audioEnabled + " audioFailed=" + audioFailed);
+        } catch (Throwable ignored) {
         }
     }
 

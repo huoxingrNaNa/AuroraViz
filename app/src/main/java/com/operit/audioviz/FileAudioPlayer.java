@@ -22,6 +22,11 @@ public class FileAudioPlayer {
         void onFinished();
     }
 
+    /** 解码出的 PCM 出口（用于边播边编码音轨） */
+    public interface PcmListener {
+        void onPcm(short[] pcm, int length, int sampleRate, int channels);
+    }
+
     private static final int FFT = 2048;
 
     private MediaExtractor extractor;
@@ -36,7 +41,12 @@ public class FileAudioPlayer {
     private long durationUs = 0;
     private int trackIndex = 0;
 
+    private volatile PcmListener pcmListener;
     private final short[] cum = new short[FFT];
+
+    public void setPcmListener(PcmListener listener) {
+        pcmListener = listener;
+    }
     private int cumLen = 0;
 
     public boolean isPlaying() {
@@ -212,6 +222,14 @@ public class FileAudioPlayer {
             }
         }
         positionSamples += frames;
+
+        PcmListener pl = pcmListener;
+        if (pl != null) {
+            try {
+                pl.onPcm(pcm, pcm.length, sampleRate, channels);
+            } catch (Throwable ignored) {
+            }
+        }
 
         // 单声道化后累积
         for (int i = 0; i < frames; i++) {
