@@ -42,6 +42,7 @@ public final class AudioEngine {
     private final float[] tmpSpec = new float[BANDS];
 
     private volatile boolean running;
+    private volatile boolean fileMode;
     private volatile boolean alive;
     private volatile float level;
     private volatile float bass;
@@ -65,7 +66,36 @@ public final class AudioEngine {
     }
 
     public boolean isRunning() {
-        return running;
+        return running || fileMode;
+    }
+
+    // ---------------------------------------------------------------- 文件音源
+    // 导入音频渲染/导出时，由 FileAudioPlayer 解码出 PCM 后直接喂给这里分析，
+    // 这样 VisualizerView 无需改动（它只认 AudioEngine 的单例数据）。
+
+    private final float[] fileRe = new float[FFT_SIZE];
+    private final float[] fileIm = new float[FFT_SIZE];
+
+    /** 进入文件播放模式（让 visualize 认为有实时数据） */
+    public void enterFileMode() {
+        fileMode = true;
+        lastFrameAt = System.currentTimeMillis();
+    }
+
+    public void exitFileMode() {
+        fileMode = false;
+        synchronized (lock) {
+            Arrays.fill(spectrum, 0f);
+            Arrays.fill(wave, 0f);
+        }
+    }
+
+    /** 外部 PCM（16bit 单声道）喂入分析，sampleRate 为源采样率 */
+    public void feedExternal(short[] buf, int n, int sampleRate) {
+        try {
+            analyze(buf, n, fileRe, fileIm, sampleRate);
+        } catch (Exception ignored) {
+        }
     }
 
     public boolean isAlive() {
@@ -206,14 +236,14 @@ public final class AudioEngine {
                 continue;
             }
             try {
-                analyze(buf, n, re, im);
+                analyze(buf, n, re, im, SAMPLE_RATE);
             } catch (Exception ignored) {
             }
         }
         alive = false;
     }
 
-    private void analyze(short[] buf, int n, float[] re, float[] im) {
+    private void analyze(short[] buf, int n, float[] re, float[] im, int sampleRate) {
         final int count = Math.min(n, FFT_SIZE);
         double sum = 0;
         for (int i = 0; i < FFT_SIZE; i++) {
@@ -240,8 +270,8 @@ public final class AudioEngine {
         for (int b = 0; b < BANDS; b++) {
             double f0 = MIN_FREQ * Math.pow(ratio, (double) b / BANDS);
             double f1 = MIN_FREQ * Math.pow(ratio, (double) (b + 1) / BANDS);
-            int k0 = Math.max(1, (int) (f0 * FFT_SIZE / SAMPLE_RATE));
-            int k1 = Math.min(FFT_SIZE / 2, Math.max(k0 + 1, (int) (f1 * FFT_SIZE / SAMPLE_RATE)));
+            int k0 = Math.max(1, (int) (f0 * FFT_SIZE / sampleRate));
+            int k1 = Math.min(FFT_SIZE / 2, Math.max(k0 + 1, (int) (f1 * FFT_SIZE / sampleRate)));
             float mag = 0f;
             for (int k = k0; k < k1; k++) {
                 float m = (float) Math.sqrt(re[k] * re[k] + im[k] * im[k]) * norm;

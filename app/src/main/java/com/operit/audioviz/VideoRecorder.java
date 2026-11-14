@@ -45,6 +45,7 @@ public class VideoRecorder {
     private static final int FPS = 30;
     private static final int BITRATE = 6_000_000;
     private static final int IFRAME_INTERVAL = 1;
+    /** 默认录制时长（秒），ExportActivity 可传入自定义值 */
     public static final int SECONDS = 15;
 
     private volatile boolean running = false;
@@ -56,6 +57,10 @@ public class VideoRecorder {
     }
 
     public void start(final Context ctx, final Callback cb) {
+        start(ctx, SECONDS, cb);
+    }
+
+    public void start(final Context ctx, final int seconds, final Callback cb) {
         if (running) return;
         running = true;
         stopRequested = false;
@@ -73,7 +78,7 @@ public class VideoRecorder {
                 View.MeasureSpec.makeMeasureSpec(HEIGHT, View.MeasureSpec.EXACTLY));
         view.layout(0, 0, WIDTH, HEIGHT);
         final Bitmap bmp = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888);
-        thread = new Thread(() -> record(app, cb, view, bmp), "AuroraRecorder");
+        thread = new Thread(() -> record(app, cb, view, bmp, seconds), "AuroraRecorder");
         thread.setPriority(Thread.NORM_PRIORITY + 1);
         thread.start();
     }
@@ -82,7 +87,7 @@ public class VideoRecorder {
         stopRequested = true;
     }
 
-    private void record(Context ctx, Callback cb, final VisualizerView view, Bitmap bitmap) {
+    private void record(Context ctx, Callback cb, final VisualizerView view, Bitmap bitmap, int seconds) {
         MediaCodec codec = null;
         MediaMuxer muxer = null;
         GlBlitter blitter = null;
@@ -142,11 +147,11 @@ public class VideoRecorder {
             int videoTrack = -1;
             boolean muxStarted = false;
 
-            final int total = SECONDS * FPS;
+            final int total = Math.max(1, seconds) * FPS;
             final long frameNs = 1_000_000_000L / FPS;
             final long baseNs = System.nanoTime();
             int frame = 0;
-            int lastReported = SECONDS;
+            int lastReported = Math.max(1, seconds);
 
             while (!stopRequested && frame < total) {
                 long target = baseNs + frame * frameNs;
@@ -184,7 +189,7 @@ public class VideoRecorder {
                 }
 
                 frame++;
-                int left = SECONDS - frame / FPS;
+                int left = Math.max(1, seconds) - frame / FPS;
                 if (left != lastReported) {
                     lastReported = left;
                     final int l = left;

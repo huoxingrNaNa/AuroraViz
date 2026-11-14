@@ -2,7 +2,7 @@
 
 Android 音频可视化应用：**悬浮窗 + 应用内双通道显示**，纯 Java 原生 Canvas 绘制，无第三方图形库。
 
-> 版本：v3.1 (versionCode 21) · minSdk 26 / targetSdk 34 · 单 APK 约 110 KB
+> 版本：v3.2 (versionCode 22) · minSdk 26 / targetSdk 34 · 单 APK 约 122 KB
 
 <img src="docs/screenshot.jpg" width="340" alt="截图">
 
@@ -43,9 +43,17 @@ Android 音频可视化应用：**悬浮窗 + 应用内双通道显示**，纯 J
 - 独立于监听的开关：可以只在应用内看可视化
 - 实时诊断行：`N 帧 · 电平 X dB · 静音 Y s`，用于区分「0 帧（应用禁止被录制）」与「有帧但静音」
 
-### 导出视频
+### 导出页面
 
-「导出可视化视频（15 秒）」按钮：把当前模式/配色渲染成 **MP4**，保存到公共目录：
+主界面「导出可视化视频…」进入独立页面（`ExportActivity`）：
+
+- **导入本地音频**（mp3 / wav / flac / m4a / ogg）：`MediaExtractor` + `MediaCodec` 解码 → `AudioTrack` 播放 → PCM 实时喂给 `AudioEngine` 做频谱分析
+- 预览区实时显示当前模式与配色
+- 时长可选 **15 / 30 / 60 秒 / 整首**
+- 「导出时静音播放」：不发声，只渲染画面
+- 不选文件时也可以直接录当前监听画面
+
+输出到公共目录：
 
 ```
 /sdcard/Movies/AuroraViz/aurora_yyyyMMdd_HHmmss.mp4
@@ -131,6 +139,8 @@ app/src/main/java/com/operit/audioviz/
 ├── SatValView.java          HSV 色域板
 ├── HueBar.java              色相条
 ├── ColorPickerDialog.java   三节点自定义调色面板
+├── ExportActivity.java      导出页面：导入音频 / 时长选择 / 预览 / 导出
+├── FileAudioPlayer.java     本地音频解码 + 播放 + PCM 实时喂给 AudioEngine
 ├── GlBlitter.java           OpenGL ES 桥：Bitmap → MediaCodec 输入 Surface
 └── VideoRecorder.java       录制导出：独立 View → Bitmap → GL → H.264 → MP4（公共 Movies 目录）
 ```
@@ -168,6 +178,7 @@ paint.setShader(gradient);           // 渐变亮度被乘上 7.8% → 看起来
 | 2.8 | **浮窗 ✕ 只隐藏不停止监听**，开关状态双向同步 |
 | 3.0 | 浮窗增强：透明度、透明背景、位置记忆、双指缩放、长按隐藏；新增 MP4 录制导出 |
 | 3.1 | 导出目录改为公共 `Movies/AuroraViz`（MediaStore，相册可见），不再写进 `Android/data` |
+| 3.2 | 独立导出页面：导入本地音频渲染、时长 15/30/60/整首自选、静音渲染开关 |
 
 ---
 

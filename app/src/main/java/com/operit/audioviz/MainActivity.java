@@ -314,7 +314,7 @@ public class MainActivity extends Activity {
         });
 
         btnAuth.setOnClickListener(v -> onAuthClick());
-        btnRecord.setLabel("导出可视化视频（15 秒）");
+        btnRecord.setLabel("导出可视化视频…");
         btnRecord.setOnClickListener(v -> onRecordClick());
         btnToggle.setOnClickListener(v -> onToggle());
 
@@ -593,6 +593,10 @@ public class MainActivity extends Activity {
     // ------------------------------------------------------------ Shizuku
 
     private void onRecordClick() {
+        startActivity(new Intent(this, ExportActivity.class));
+    }
+
+    private void onRecordClickLegacy() {
         if (android.os.Build.VERSION.SDK_INT < 29
                 && checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
                 != android.content.pm.PackageManager.PERMISSION_GRANTED) {
@@ -615,7 +619,7 @@ public class MainActivity extends Activity {
 
             @Override
             public void onDone(String path, long bytes) {
-                btnRecord.setLabel("导出可视化视频（15 秒）");
+                btnRecord.setLabel("导出可视化视频…");
                 String size = String.format(java.util.Locale.US, "%.1f MB", bytes / 1048576f);
                 Toast.makeText(MainActivity.this,
                         "已保存 " + size + "\n" + path, Toast.LENGTH_LONG).show();
@@ -623,7 +627,7 @@ public class MainActivity extends Activity {
 
             @Override
             public void onError(String message) {
-                btnRecord.setLabel("导出可视化视频（15 秒）");
+                btnRecord.setLabel("导出可视化视频…");
                 Toast.makeText(MainActivity.this, "录制失败：" + message, Toast.LENGTH_LONG).show();
             }
         });
