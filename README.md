@@ -4,6 +4,8 @@ Android 音频可视化应用：**悬浮窗 + 应用内双通道显示**，纯 J
 
 > 版本：v2.8 (versionCode 19) · minSdk 26 / targetSdk 34 · 单 APK 约 98 KB
 
+<img src="docs/screenshot.png" width="300" alt="截图">
+
 ---
 
 ## 功能
