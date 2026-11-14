@@ -2,7 +2,7 @@
 
 Android 音频可视化应用：**悬浮窗 + 应用内双通道显示**，纯 Java 原生 Canvas 绘制，无第三方图形库。
 
-> 版本：v3.2 (versionCode 22) · minSdk 26 / targetSdk 34 · 单 APK 约 122 KB
+> 版本：v4.0 (versionCode 30) · minSdk 26 / targetSdk 34 · 单 APK 约 122 KB
 
 <img src="docs/screenshot.jpg" width="340" alt="截图">
 
