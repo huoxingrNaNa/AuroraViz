@@ -1,11 +1,7 @@
 package com.operit.audioviz;
 
 import android.content.Context;
-import android.graphics.Bitmap;
 import android.graphics.Canvas;
-import android.graphics.PorterDuff;
-import android.graphics.PorterDuffXfermode;
-import android.graphics.Rect;
 import android.graphics.Color;
 import android.graphics.LinearGradient;
 import android.graphics.Paint;
@@ -42,14 +38,6 @@ public class VisualizerView extends View {
     private long lastDrawAtMs = 0L;
     /** 渲染帧率上限：0 = 跟随屏幕刷新 */
     private int renderHz = 0;
-    // ---- Bloom 辉光 ----
-    private boolean bloom = false;
-    private Bitmap bloomBmp, bloomSmall;
-    private Canvas bloomCanvas, bloomSmallCanvas;
-    private final Paint bloomPaint = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
-    private final Paint bloomScreen = new Paint(Paint.FILTER_BITMAP_FLAG);
-    private final Rect bloomSrcRect = new Rect();
-    private final RectF bloomDstRect = new RectF();
     private long lastInvalidateAt = 0L;
     /** 平滑时间常数（ms）：越大越软 */
     private float smoothTau = 26f;
@@ -119,29 +107,6 @@ public class VisualizerView extends View {
     }
 
     /** 录制导出时关闭自驱重绘（由录制线程手动逐帧 draw） */
-    /** Bloom 辉光后处理开关 */
-    public void setBloom(boolean enabled) {
-        if (bloom == enabled) return;
-        bloom = enabled;
-        if (!enabled) {
-            if (bloomBmp != null) {
-                bloomBmp.recycle();
-                bloomBmp = null;
-                bloomCanvas = null;
-            }
-            if (bloomSmall != null) {
-                bloomSmall.recycle();
-                bloomSmall = null;
-                bloomSmallCanvas = null;
-            }
-        }
-        invalidate();
-    }
-
-    public boolean isBloom() {
-        return bloom;
-    }
-
     /** 可视化渲染帧率上限：0=跟随屏幕刷新，也可设 30/60/90/120 */
     public void setRenderHz(int hz) {
         renderHz = Math.max(0, hz);
@@ -178,47 +143,7 @@ public class VisualizerView extends View {
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
-        if (bloom && drawWithBloom(canvas)) return;
         drawContent(canvas);
-    }
-
-    /** Bloom：整帧先画到离屏，再降采样模糊后用 SCREEN 叠回，形成外溢光晕 */
-    private boolean drawWithBloom(Canvas canvas) {
-        final int w = getWidth();
-        final int h = getHeight();
-        if (w <= 0 || h <= 0) return false;
-        try {
-            if (bloomBmp == null || bloomBmp.getWidth() != w || bloomBmp.getHeight() != h) {
-                if (bloomBmp != null) bloomBmp.recycle();
-                bloomBmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
-                bloomCanvas = new Canvas(bloomBmp);
-                int sw = Math.max(1, w / 4);
-                int sh = Math.max(1, h / 4);
-                if (bloomSmall != null) bloomSmall.recycle();
-                bloomSmall = Bitmap.createBitmap(sw, sh, Bitmap.Config.ARGB_8888);
-                bloomSmallCanvas = new Canvas(bloomSmall);
-            }
-            bloomBmp.eraseColor(0);
-            drawContent(bloomCanvas);
-            canvas.drawBitmap(bloomBmp, 0, 0, null);
-
-            bloomSrcRect.set(0, 0, w, h);
-            bloomDstRect.set(0, 0, bloomSmall.getWidth(), bloomSmall.getHeight());
-            bloomSmallCanvas.drawBitmap(bloomBmp, bloomSrcRect, bloomDstRect, bloomPaint);
-            // 放大回缩再采集一次 → 更宽的柔光
-            bloomSmallCanvas.drawBitmap(bloomSmall, 0, 0, bloomPaint);
-
-            float expand = dp(12);
-            bloomDstRect.set(-expand, -expand, w + expand, h + expand);
-            bloomScreen.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.SCREEN));
-            bloomScreen.setAlpha(130);
-            canvas.drawBitmap(bloomSmall, null, bloomDstRect, bloomScreen);
-            bloomScreen.setAlpha(255);
-            bloomScreen.setXfermode(null);
-            return true;
-        } catch (Throwable t) {
-            return false;
-        }
     }
 
     private void drawContent(Canvas canvas) {

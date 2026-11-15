@@ -32,7 +32,6 @@ public final class Prefs {
     private static final String K_REC_BR = "rec_br";
     private static final String K_SMOOTH = "viz_smooth";
     private static final String K_VIZ_HZ = "viz_hz";
-    private static final String K_BLOOM = "bloom";
 
     private Prefs() {
     }
@@ -216,11 +215,5 @@ public final class Prefs {
         return idx <= 0 ? 0 : idx == 1 ? 30 : idx == 2 ? 60 : 120;
     }
 
-    public static boolean bloom(Context c) {
-        return sp(c).getBoolean(K_BLOOM, false);
-    }
 
-    public static void setBloom(Context c, boolean v) {
-        sp(c).edit().putBoolean(K_BLOOM, v).apply();
-    }
 }

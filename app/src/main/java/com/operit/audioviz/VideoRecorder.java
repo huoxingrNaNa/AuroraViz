@@ -145,7 +145,6 @@ public class VideoRecorder {
         view.setIdleAnim(Prefs.idleAnim(app));
         view.setSelfDrive(false);
         view.setSmoothTau(smoothTau);
-        view.setBloom(Prefs.bloom(app));
         view.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
         view.layout(0, 0, width, height);
