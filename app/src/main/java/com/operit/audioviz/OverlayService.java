@@ -114,8 +114,10 @@ public class OverlayService extends Service {
                     viz.setIdleAnim(Prefs.idleAnim(this));
         viz.setSmoothTau(Prefs.vizSmoothTau(this));
         viz.setRenderHz(Prefs.vizHzValue(Prefs.vizHz(this)));
+        viz.setBloom(Prefs.bloom(this));
                     viz.setSmoothTau(Prefs.vizSmoothTau(this));
                     viz.setRenderHz(Prefs.vizHzValue(Prefs.vizHz(this)));
+                    viz.setBloom(Prefs.bloom(this));
                 }
             } else {
                 hideOverlay();

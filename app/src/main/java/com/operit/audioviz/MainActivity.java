@@ -60,6 +60,7 @@ public class MainActivity extends Activity {
     private Switch swBare;
     private boolean suppressOverlay = false;
     private Switch swIdle;
+    private Switch swBloom;
 
     private ChipView chipMic, chipSys;
     private ChipView[] styleChips;
@@ -156,12 +157,21 @@ public class MainActivity extends Activity {
         seekAlpha = findViewById(R.id.seekAlpha);
         swBare = findViewById(R.id.swBare);
         swIdle = findViewById(R.id.swIdle);
+        swBloom = findViewById(R.id.swBloom);
+        swBloom.setChecked(Prefs.bloom(this));
+        preview.setBloom(Prefs.bloom(this));
+        swBloom.setOnCheckedChangeListener((bv, isChecked) -> {
+            Prefs.setBloom(this, isChecked);
+            preview.setBloom(isChecked);
+            syncOverlay();
+        });
 
         chipMic = findViewById(R.id.chipMic);
         chipSys = findViewById(R.id.chipSys);
         styleChips = new ChipView[]{
                 findViewById(R.id.st0), findViewById(R.id.st1), findViewById(R.id.st2),
-                findViewById(R.id.st3), findViewById(R.id.st4), findViewById(R.id.st5)
+                findViewById(R.id.st3), findViewById(R.id.st4), findViewById(R.id.st5),
+                findViewById(R.id.st6), findViewById(R.id.st7)
         };
         swatches = new SwatchView[]{
                 findViewById(R.id.sw0), findViewById(R.id.sw1), findViewById(R.id.sw2),
