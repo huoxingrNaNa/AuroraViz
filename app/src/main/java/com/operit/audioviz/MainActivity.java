@@ -170,8 +170,7 @@ public class MainActivity extends Activity {
         chipSys = findViewById(R.id.chipSys);
         styleChips = new ChipView[]{
                 findViewById(R.id.st0), findViewById(R.id.st1), findViewById(R.id.st2),
-                findViewById(R.id.st3), findViewById(R.id.st4), findViewById(R.id.st5),
-                findViewById(R.id.st6), findViewById(R.id.st7)
+                findViewById(R.id.st3), findViewById(R.id.st4), findViewById(R.id.st5)
         };
         swatches = new SwatchView[]{
                 findViewById(R.id.sw0), findViewById(R.id.sw1), findViewById(R.id.sw2),

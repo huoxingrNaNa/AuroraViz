@@ -50,16 +50,6 @@ public class VisualizerView extends View {
     private final Paint bloomScreen = new Paint(Paint.FILTER_BITMAP_FLAG);
     private final Rect bloomSrcRect = new Rect();
     private final RectF bloomDstRect = new RectF();
-    // ---- 瀑布 ----
-    private Bitmap specBmp;
-    private Canvas specCanvas;
-    private int specPos = 0;
-    private final Rect specSrcRect = new Rect();
-    private final RectF specDstRect = new RectF();
-    private final Paint specPaint = new Paint();
-    // ---- 表盘 ----
-    private float vuPeakDb = -60f;
-    private long vuPeakAt = 0L;
     private long lastInvalidateAt = 0L;
     /** 平滑时间常数（ms）：越大越软 */
     private float smoothTau = 26f;
@@ -318,13 +308,6 @@ public class VisualizerView extends View {
             case DISC:
                 drawDisc(canvas, l, t, r, b, tSec, bass, beat);
                 break;
-            case SPECTROGRAM:
-                drawSpectrogram(canvas, l, t, r, b);
-                break;
-            case VU:
-                drawVu(canvas, l, t, r, b,
-                        active ? engine.lastRmsDb() : -60f, active);
-                break;
             case COLUMN:
             default:
                 drawColumnSpectrum(canvas, l, t, r, b, beat, active);
@@ -352,161 +335,6 @@ public class VisualizerView extends View {
     }
 
     // ------------------------------------------------------------ 背景 / 标签 / 纵轴
-
-    // ------------------------------------------------------------ 瀑布（Spectrogram）
-    private void drawSpectrogram(Canvas canvas, float l, float t, float r, float b) {
-        final int w = Math.max(1, (int) (r - l));
-        final int h = Math.max(1, (int) (b - t));
-        if (specBmp == null || specBmp.getWidth() != w || specBmp.getHeight() != h) {
-            if (specBmp != null) specBmp.recycle();
-            specBmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
-            specCanvas = new Canvas(specBmp);
-            specCanvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR);
-            specPos = 0;
-        }
-        final int bands = specA.length;
-        final float cell = (float) h / bands;
-        for (int i = 0; i < bands; i++) {
-            specPaint.setColor(spectroColor(specA[i]));
-            float y0 = h - (i + 1) * cell;
-            specCanvas.drawRect(specPos, y0, specPos + 1f, y0 + cell + 0.6f, specPaint);
-        }
-        specPos = (specPos + 1) % w;
-
-        canvas.save();
-        canvas.clipRect(l, t, r, b);
-        if (specPos < w) {
-            specSrcRect.set(specPos, 0, w, h);
-            specDstRect.set(l, t, l + (w - specPos), b);
-            canvas.drawBitmap(specBmp, specSrcRect, specDstRect, null);
-        }
-        if (specPos > 0) {
-            specSrcRect.set(0, 0, specPos, h);
-            specDstRect.set(l + (w - specPos), t, r, b);
-            canvas.drawBitmap(specBmp, specSrcRect, specDstRect, null);
-        }
-        canvas.restore();
-
-        // 频率刻度点
-        strokePaint.setStyle(Paint.Style.STROKE);
-        strokePaint.setStrokeWidth(dp(0.8f));
-        strokePaint.setShader(null);
-        strokePaint.setAlpha(90);
-        strokePaint.setColor(palette.c1);
-        rectF.set(l, t, r, b);
-        canvas.drawRoundRect(rectF, dp(8), dp(8), strokePaint);
-        strokePaint.setAlpha(255);
-        strokePaint.setStyle(Paint.Style.FILL);
-    }
-
-    /** 强度 → 颜色：低值压暗，高值取主色 */
-    private int spectroColor(float v) {
-        if (!(v > 0.02f)) return 0xFF06070C;
-        float k = Math.min(1f, v * 1.5f);
-        int base = (k < 0.5f) ? palette.c0 : palette.c2;
-        float warn = (k < 0.5f) ? (k / 0.5f) : ((k - 0.5f) / 0.5f);
-        int from = (k < 0.5f) ? 0xFF06070C : palette.c0;
-        int to = (k < 0.5f) ? palette.c0 : palette.c2;
-        float m = warn;
-        int rr = (int) (Color.red(from) + (Color.red(to) - Color.red(from)) * m);
-        int gg = (int) (Color.green(from) + (Color.green(to) - Color.green(from)) * m);
-        int bb = (int) (Color.blue(from) + (Color.blue(to) - Color.blue(from)) * m);
-        float lum = 0.2f + 0.8f * k;
-        return Color.rgb((int) Math.min(255, rr * lum), (int) Math.min(255, gg * lum),
-                (int) Math.min(255, bb * lum));
-    }
-
-    // ------------------------------------------------------------ 表盘（VU）
-    private void drawVu(Canvas canvas, float l, float t, float r, float b, float db, boolean active) {
-        final float cx = (l + r) / 2f;
-        final float cy = b - (b - t) * 0.20f;
-        final float rad = Math.min((r - l) * 0.44f, (b - t) * 0.86f);
-        if (rad < dp(20)) return;
-        rectF.set(cx - rad, cy - rad, cx + rad, cy + rad);
-
-        // 底弧
-        strokePaint.setShader(null);
-        strokePaint.setStyle(Paint.Style.STROKE);
-        strokePaint.setStrokeWidth(dp(1.6f));
-        strokePaint.setAlpha(60);
-        strokePaint.setColor(palette.c1);
-        canvas.drawArc(rectF, -140f, 280f, false, strokePaint);
-
-        // 刻度（-60 → 0 dB）
-        final int ticks = 12;
-        for (int i = 0; i <= ticks; i++) {
-            float t01 = (float) i / ticks;
-            double a = Math.toRadians(-140f + 280f * t01 + 90f);
-            boolean major = (i % 3 == 0);
-            float rin = rad - dp(major ? 10 : 5);
-            float x1 = cx + (float) Math.cos(a) * rin;
-            float y1 = cy + (float) Math.sin(a) * rin;
-            float x2 = cx + (float) Math.cos(a) * (rad - dp(1.5f));
-            float y2 = cy + (float) Math.sin(a) * (rad - dp(1.5f));
-            strokePaint.setAlpha(major ? 200 : 110);
-            strokePaint.setStrokeWidth(dp(major ? 1.8f : 1f));
-            strokePaint.setColor(t01 > 0.92f ? palette.c2 : palette.c0);
-            canvas.drawLine(x1, y1, x2, y2, strokePaint);
-        }
-
-        // 指针角度：-50° .. +50°（0 = 正上）
-        float level01 = (db + 60f) / 60f;
-        if (level01 < 0f) level01 = 0f;
-        if (level01 > 1f) level01 = 1f;
-
-        // 峰值针（时间驱动回落）
-        long now = android.os.SystemClock.uptimeMillis();
-        float dt = vuPeakAt == 0L ? 16f : (now - vuPeakAt);
-        vuPeakAt = now;
-        if (dt < 1f) dt = 1f;
-        if (dt > 200f) dt = 200f;
-        vuPeakDb -= dt / 1000f * 12f;          // 每秒回落 12 dB
-        if (db > vuPeakDb) vuPeakDb = db;
-
-        float peak01 = (vuPeakDb + 60f) / 60f;
-        if (peak01 < 0f) peak01 = 0f;
-        if (peak01 > 1f) peak01 = 1f;
-
-        // 峰值细线
-        strokePaint.setAlpha(170);
-        strokePaint.setStrokeWidth(dp(1.2f));
-        strokePaint.setColor(palette.c2);
-        canvas.save();
-        canvas.rotate(-50f + 100f * peak01, cx, cy);
-        canvas.drawLine(cx, cy, cx, cy - (rad - dp(12)), strokePaint);
-        canvas.restore();
-
-        // 主指针
-        strokePaint.setAlpha(255);
-        strokePaint.setStrokeWidth(dp(2.6f));
-        strokePaint.setColor(level01 > 0.92f ? palette.c2 : palette.c0);
-        canvas.save();
-        canvas.rotate(-50f + 100f * level01, cx, cy);
-        canvas.drawLine(cx, cy, cx, cy - (rad - dp(16)), strokePaint);
-        canvas.restore();
-
-        // 轴心
-        fillPaint.setShader(null);
-        fillPaint.setStyle(Paint.Style.FILL);
-        fillPaint.setAlpha(255);
-        fillPaint.setColor(palette.c0);
-        canvas.drawCircle(cx, cy, dp(3.2f), fillPaint);
-
-        // 读数
-        if (drawBackground) {
-            strokePaint.setStyle(Paint.Style.FILL);
-            strokePaint.setAlpha(220);
-            strokePaint.setColor(palette.glow);
-            float fs = Math.max(dp(9), rad * 0.16f);
-            strokePaint.setTextSize(fs);
-            strokePaint.setTextAlign(Paint.Align.CENTER);
-            String txt = active ? ((int) db + " dB") : "-- dB";
-            canvas.drawText(txt, cx, cy + rad * 0.42f, strokePaint);
-            strokePaint.setTextAlign(Paint.Align.LEFT);
-            strokePaint.setAlpha(255);
-        }
-        strokePaint.setStyle(Paint.Style.FILL);
-    }
 
     private void drawGlass(Canvas canvas, int w, int h) {
         float radius = dp(22);
