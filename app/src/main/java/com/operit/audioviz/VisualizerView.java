@@ -36,6 +36,9 @@ public class VisualizerView extends View {
     /** 屏幕上实际显示的值（按时间插值逼近 target，与帧率无关） */
     private final float[] specDraw = new float[AudioEngine.BANDS];
     private long lastDrawAtMs = 0L;
+    /** 渲染帧率上限：0 = 跟随屏幕刷新 */
+    private int renderHz = 0;
+    private long lastInvalidateAt = 0L;
     /** 平滑时间常数（ms）：越大越软 */
     private float smoothTau = 26f;
     private final float[] waveA = new float[AudioEngine.WAVE_POINTS];
@@ -104,6 +107,11 @@ public class VisualizerView extends View {
     }
 
     /** 录制导出时关闭自驱重绘（由录制线程手动逐帧 draw） */
+    /** 可视化渲染帧率上限：0=跟随屏幕刷新，也可设 30/60/90/120 */
+    public void setRenderHz(int hz) {
+        renderHz = Math.max(0, hz);
+    }
+
     /** 频谱跟随的平滑程度：时间常数 ms（8=紧跟，45=很软） */
     public void setSmoothTau(float tauMs) {
         smoothTau = Math.max(6f, Math.min(60f, tauMs));
@@ -228,7 +236,22 @@ public class VisualizerView extends View {
         }
 
         if (showModeLabel) drawModeLabel(canvas, w, h);
-        if (selfDrive) postInvalidateOnAnimation();
+        if (selfDrive) {
+            // 自驱重绘：renderHz>0 时限速，避免不必要的耗电
+            if (renderHz <= 0) {
+                postInvalidateOnAnimation();
+            } else {
+                long now2 = android.os.SystemClock.uptimeMillis();
+                long frameMs = Math.max(4, 1000 / renderHz);
+                long since = now2 - lastInvalidateAt;
+                if (since >= frameMs - 2) {
+                    lastInvalidateAt = now2;
+                    postInvalidateOnAnimation();
+                } else {
+                    postInvalidateDelayed(frameMs - since);
+                }
+            }
+        }
     }
 
     // ------------------------------------------------------------ 背景 / 标签 / 纵轴

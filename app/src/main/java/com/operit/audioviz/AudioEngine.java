@@ -24,7 +24,7 @@ public final class AudioEngine {
     public static final int BANDS = 48;
     public static final int WAVE_POINTS = 192;
     public static final int SAMPLE_RATE = 44100;
-    private static final int FFT_SIZE = 1024;
+    private static final int FFT_SIZE = 2048;
     private static final float MIN_FREQ = 40f;
     private static final float MAX_FREQ = 16000f;
 
@@ -311,6 +311,25 @@ public final class AudioEngine {
             for (int k = k0; k < k1; k++) {
                 float m = (float) Math.sqrt(re[k] * re[k] + im[k] * im[k]) * norm;
                 if (m > mag) mag = m;
+            }
+            // 低频：多个 band 会挤进同一个 bin（bin 宽度 21.5Hz @2048），直接取最大值会让
+            // 相邻柱完全等高。这里再按“该 band 的中心频率”在相邻两个 bin 间做线性插值，
+            // 保证每个 band 都有自己的值。
+            double fc = (f0 + f1) * 0.5;
+            double pos = fc * FFT_SIZE / sampleRate;
+            if (pos < 1) pos = 1;
+            if (pos > FFT_SIZE / 2 - 2) pos = FFT_SIZE / 2 - 2;
+            int pi = (int) pos;
+            float frac = (float) (pos - pi);
+            float m0 = (float) Math.sqrt(re[pi] * re[pi] + im[pi] * im[pi]) * norm;
+            float m1 = (float) Math.sqrt(re[pi + 1] * re[pi + 1] + im[pi + 1] * im[pi + 1]) * norm;
+            float interp = m0 + (m1 - m0) * frac;
+            if (k1 - k0 < 2) {
+                // 窄带（低于 ~1 个 bin）：直接用插值结果
+                mag = interp;
+            } else {
+                // 宽带：峰值与插值取大者，保留冲击感
+                mag = Math.max(mag, interp);
             }
             float db = 20f * (float) Math.log10(mag + 1e-7f);
             float v = (db + 56f) / 56f;

@@ -139,7 +139,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="14dp"
                 android:tag="label"
-                android:text="帧率"
+                android:text="视频帧率"
                 android:textColor="#FF8A93B2"
                 android:textSize="10sp"
                 android:textStyle="bold" />
@@ -203,7 +203,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="14dp"
                 android:tag="label"
-                android:text="可视化平滑"
+                android:text="画面平滑"
                 android:textColor="#FF8A93B2"
                 android:textSize="10sp"
                 android:textStyle="bold" />

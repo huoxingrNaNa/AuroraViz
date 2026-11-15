@@ -65,6 +65,7 @@ public class MainActivity extends Activity {
     private ChipView[] styleChips;
     private ChipView[] uiChips;
     private ChipView[] pkChips;
+    private ChipView[] hzChips;
     private SwatchView[] swatches;
 
     private int source;
@@ -191,6 +192,24 @@ public class MainActivity extends Activity {
         }
         preview.setPeakMode(Prefs.peakGlow(this));
         preview.setSmoothTau(Prefs.vizSmoothTau(this));
+        // 可视化帧率（只影响重绘频率，不影响导出视频帧率）
+        hzChips = new ChipView[]{findViewById(R.id.vz0), findViewById(R.id.vz1),
+                findViewById(R.id.vz2), findViewById(R.id.vz3)};
+        String[] hzLabels = {"自动", "30", "60", "120"};
+        int hzSel = Prefs.vizHz(this);
+        Palette hzPal = Palette.byIndex(Prefs.palette(this));
+        for (int i = 0; i < hzChips.length; i++) {
+            final int hi = i;
+            hzChips[i].setPalette(hzPal);
+            hzChips[i].setLabel(hzLabels[i]);
+            hzChips[i].setChecked(i == hzSel);
+            hzChips[i].setOnClickListener(v -> {
+                for (int k = 0; k < hzChips.length; k++) hzChips[k].setChecked(k == hi);
+                Prefs.setVizHz(this, hi);
+                preview.setRenderHz(Prefs.vizHzValue(hi));
+            });
+        }
+        preview.setRenderHz(Prefs.vizHzValue(hzSel));
 
         styleIdx = Prefs.style(this);
         paletteIdx = Prefs.palette(this);

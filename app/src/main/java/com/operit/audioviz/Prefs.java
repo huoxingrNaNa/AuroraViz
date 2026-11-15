@@ -31,6 +31,7 @@ public final class Prefs {
     private static final String K_REC_FPS = "rec_fps";
     private static final String K_REC_BR = "rec_br";
     private static final String K_SMOOTH = "viz_smooth";
+    private static final String K_VIZ_HZ = "viz_hz";
 
     private Prefs() {
     }
@@ -199,5 +200,18 @@ public final class Prefs {
 
     public static float smoothTauOf(int idx) {
         return idx <= 0 ? 16f : idx == 1 ? 30f : 52f;
+    }
+
+    public static int vizHz(Context c) {
+        return sp(c).getInt(K_VIZ_HZ, 0);
+    }
+
+    public static void setVizHz(Context c, int v) {
+        sp(c).edit().putInt(K_VIZ_HZ, v).apply();
+    }
+
+    /** 档位 → 实际帧率（0 表示跟随屏幕刷新） */
+    public static int vizHzValue(int idx) {
+        return idx <= 0 ? 0 : idx == 1 ? 30 : idx == 2 ? 60 : 120;
     }
 }
