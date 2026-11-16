@@ -121,7 +121,8 @@ public class OverlayService extends Service {
                     viz.setPeakMode(Prefs.peakGlow(this));
                     viz.setIdleAnim(Prefs.idleAnim(this));
                     viz.setFreqAxis(Prefs.freqAxis(this));
-            viz.setStereo(curStereoMode());
+                    viz.setShowModeLabel(Prefs.modeLabel(this));
+                    viz.setStereo(curStereoMode());
         viz.setSmoothTau(Prefs.vizSmoothTau(this));
         viz.setRenderHz(Prefs.vizHzValue(Prefs.vizHz(this)));
                     viz.setSmoothTau(Prefs.vizSmoothTau(this));
@@ -378,10 +379,13 @@ public class OverlayService extends Service {
         overlayView = new FrameLayout(this);
         viz = new VisualizerView(this);
         viz.setDrawBackground(!Prefs.bare(this));
-        viz.setShowModeLabel(true);
+        viz.setShowModeLabel(Prefs.modeLabel(this));
         viz.setPeakMode(Prefs.peakGlow(this));
         viz.setIdleAnim(Prefs.idleAnim(this));
         viz.setFreqAxis(Prefs.freqAxis(this));
+        viz.setModeLabelAnchor(2);  // 浮窗：顶部居中
+        viz.setLabelTopDp(11f);
+        viz.setLabelRightDp(7f);  // 竖排更贴右边缘
         viz.setStereo(curStereoMode());
         viz.setStyle(Style.byIndex(Prefs.style(this)));
         viz.setPalette(Palette.byIndex(Prefs.palette(this)));
@@ -403,8 +407,8 @@ public class OverlayService extends Service {
         close.setOnClickListener(v -> hideOverlayKeepRunning());
         FrameLayout.LayoutParams clp = new FrameLayout.LayoutParams(dp(22), dp(22),
                 Gravity.TOP | Gravity.END);
-        clp.topMargin = dp(10);
-        clp.rightMargin = dp(10);
+        clp.topMargin = dp(8);
+        clp.rightMargin = dp(4);
         overlayView.addView(close, clp);
 
         float ratio = Prefs.size(this);

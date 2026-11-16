@@ -65,6 +65,7 @@ public class MainActivity extends Activity {
     private Switch swAutoSens;
     private Switch swFreqAxis;
     private Switch swStereoLog;
+    private Switch swModeLabel;
     private boolean suppressOverlay = false;
     private Switch swIdle;
     private Switch swDiag;
@@ -171,6 +172,9 @@ public class MainActivity extends Activity {
         setContentView(R.layout.activity_main);
 
         preview = findViewById(R.id.preview);
+        preview.setModeLabelAnchor(1);  // 应用内：右上（LIVE 状态行下一行）
+        preview.setLabelTopDp(38f);
+        preview.setLabelRightDp(14f);
         stateText = findViewById(R.id.stateText);
         message = findViewById(R.id.message);
         statusShizuku = findViewById(R.id.statusShizuku);
@@ -192,6 +196,7 @@ public class MainActivity extends Activity {
         swAutoSens = findViewById(R.id.swAutoSens);
         swFreqAxis = findViewById(R.id.swFreqAxis);
         swStereoLog = findViewById(R.id.swStereoLog);
+        swModeLabel = findViewById(R.id.swModeLabel);
         swIdle = findViewById(R.id.swIdle);
         swDiag = findViewById(R.id.swDiag);
         swStereo = findViewById(R.id.swStereo);
@@ -454,6 +459,11 @@ public class MainActivity extends Activity {
             syncOverlay();
         });
 
+        swModeLabel.setChecked(Prefs.modeLabel(this));
+        swModeLabel.setOnCheckedChangeListener((bv, checked) -> {
+            Prefs.setModeLabel(MainActivity.this, checked);
+            syncOverlay();
+        });
         swStereoLog.setChecked(Prefs.stereoLog(this));
         AudioEngine.get().setStereoLog(Prefs.stereoLog(this));
         swStereoLog.setOnCheckedChangeListener((bv, checked) -> {

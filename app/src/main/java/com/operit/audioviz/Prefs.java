@@ -15,6 +15,7 @@ public final class Prefs {
     private static final String K_AUTO_SENS = "auto_sens";
     private static final String K_FREQ_AXIS = "freq_axis";
     private static final String K_STEREO_LOG = "stereo_log";
+    private static final String K_MODE_LABEL = "mode_label";
     private static final String K_OVERLAY = "overlay_on";
     private static final String K_UI_STYLE = "ui_style";
     private static final String K_PEAK = "peak_glow";
@@ -96,6 +97,14 @@ public final class Prefs {
     }
     public static boolean freqAxis(Context c) {
         return sp(c).getBoolean(K_FREQ_AXIS, false);
+    }
+
+    public static boolean modeLabel(Context c) {
+        return sp(c).getBoolean(K_MODE_LABEL, true);
+    }
+
+    public static void setModeLabel(Context c, boolean v) {
+        sp(c).edit().putBoolean(K_MODE_LABEL, v).apply();
     }
 
     public static boolean stereoLog(Context c) {

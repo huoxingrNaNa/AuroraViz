@@ -806,6 +806,44 @@
                     android:showText="false" />
             </LinearLayout>
 
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="悬浮窗样式标签"
+                        android:textColor="#FFF2F5FF"
+                        android:textSize="12.5sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:tag="hint"
+                        android:text="在悬浮窗里显示「柱状 · 霓虹」这样的样式名"
+                        android:textColor="#FF6F7896"
+                        android:textSize="9.5sp" />
+                </LinearLayout>
+
+                <Switch
+                    android:id="@+id/swModeLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:showText="false" />
+            </LinearLayout>
+
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"

@@ -96,6 +96,12 @@ public class VisualizerView extends View {
     /** 自驱重绘开关：录制导出时用独立 View 手动逐帧绘制，需关掉自驱 */
     private boolean selfDrive = true;
     private boolean showModeLabel = false;
+    /** 右上角模式标签的基线高度（dp），由宿主按自己顶部占用的空间设置 */
+    private float labelTopDp = 38f;
+    /** 模式标签右侧内缩（dp），给宿主的 ✕ 按钮让位 */
+    private float labelRightDp = 14f;
+    /** 频率轴启用时标签的去向：0 = 右下（默认），1 = 右上，2 = 顶部居中 */
+    private int labelAnchor = 0;
     /** 0 发光粒子 / 1 细线 / 2 关闭 —— 与界面 chip 顺序严格一致 */
     private int peakMode = 0;
     /** 待机时是否播呼吸动画 */
@@ -233,6 +239,18 @@ public class VisualizerView extends View {
 
     public void setSelfDrive(boolean enabled) {
         selfDrive = enabled;
+    }
+
+    public void setLabelTopDp(float v) {
+        labelTopDp = v;
+    }
+
+    public void setLabelRightDp(float v) {
+        labelRightDp = v;
+    }
+
+    public void setModeLabelAnchor(int a) {
+        labelAnchor = a;
     }
 
     public void setShowModeLabel(boolean enabled) {
@@ -453,24 +471,42 @@ public class VisualizerView extends View {
     }
 
     private void drawModeLabel(Canvas canvas, int w, int h) {
+        String label = style.label + " · " + palette.label;
+        boolean shifted = freqAxis && style == Style.COLUMN;
+        // 锚点 2：顶部居中，无条件生效（悬浮窗空间小，右下总被柱子占着）
+        if (labelAnchor == 2) {
+            textPaint.setTextSize(dp(8f));
+            textPaint.setLetterSpacing(0.16f);
+            textPaint.setTextAlign(Paint.Align.CENTER);
+            float tw = textPaint.measureText(label);
+            float cx = w * 0.5f;
+            float baseY = Math.max(dp(labelTopDp), dp(9f));
+            rectF.set(cx - tw * 0.5f - dp(7), baseY - dp(9.5f),
+                    cx + tw * 0.5f + dp(7), baseY + dp(3.5f));
+            fillPaint.setShader(null);
+            fillPaint.setColor(0x59000000);
+            canvas.drawRoundRect(rectF, dp(4), dp(4), fillPaint);
+            textPaint.setColor(withAlpha(mixWhite(col2, 0.3f), 0.9f));
+            canvas.drawText(label, cx, baseY, textPaint);
+            textPaint.setTextAlign(Paint.Align.LEFT);
+            return;
+        }
+        // 锚点 1：开启频率轴时去右上（让开底部轴带），否则维持右下
+        boolean topRight = labelAnchor == 1 && shifted;
         textPaint.setTextSize(dp(8.5f));
         textPaint.setLetterSpacing(0.14f);
         textPaint.setTextAlign(Paint.Align.RIGHT);
-        String label = style.label + " · " + palette.label;
         float tw = textPaint.measureText(label);
-        // 频率轴占用底部轴带时，模式标签移到右上角，避免撞在一起
-        boolean topRight = freqAxis && style == Style.COLUMN;
-        float baseY = topRight ? dp(21f) : h - dp(10);
-        rectF.set(w - dp(14) - tw - dp(5), baseY - dp(9.5f),
-                w - dp(14) + dp(5), baseY + dp(3.5f));
+        float rx = w - dp(labelRightDp);
+        float baseY = topRight ? Math.max(dp(labelTopDp), dp(17f)) : h - dp(10);
+        rectF.set(rx - tw - dp(5), baseY - dp(9.5f), rx + dp(5), baseY + dp(3.5f));
         fillPaint.setShader(null);
         fillPaint.setColor(0x66000000);
         canvas.drawRoundRect(rectF, dp(4), dp(4), fillPaint);
         textPaint.setColor(withAlpha(mixWhite(col2, 0.25f), 0.92f));
-        canvas.drawText(label, w - dp(14), baseY, textPaint);
+        canvas.drawText(label, rx, baseY, textPaint);
         textPaint.setTextAlign(Paint.Align.LEFT);
     }
-
     /** 纵向坐标轴：4 条 dB 网格线 + 左侧刻度 */
     private void drawAxisGrid(Canvas canvas, float left, float top, float right, float bottom,
                               boolean centerAxis) {
