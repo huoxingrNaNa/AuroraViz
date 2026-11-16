@@ -62,6 +62,8 @@ public class MainActivity extends Activity {
     private Switch swIdle;
 
     private ChipView chipMic, chipSys;
+    private View pageViz, pageAbout;
+    private ChipView tabViz, tabAbout;
     /** 正在监听时切换音源（拿完授权/权限后原地重启采集） */
     private boolean switchInPlace = false;
     private ChipView[] styleChips;
@@ -250,6 +252,39 @@ public class MainActivity extends Activity {
                 applyUiStyle();
                 applySelections();
             });
+        }
+
+        // ---- 底部页签：可视化 / 关于 ----
+        pageViz = findViewById(R.id.pageViz);
+        pageAbout = findViewById(R.id.pageAbout);
+        tabViz = findViewById(R.id.tabViz);
+        tabAbout = findViewById(R.id.tabAbout);
+        tabViz.setLabel("可视化");
+        tabAbout.setLabel("关于");
+        tabViz.setChecked(true);
+        tabViz.setOnClickListener(v -> showPage(0));
+        tabAbout.setOnClickListener(v -> showPage(1));
+        TextView aboutVer = findViewById(R.id.vAboutVer);
+        if (aboutVer != null) {
+            try {
+                String vn = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+                aboutVer.setText("版本 " + vn + " · MIT License");
+            } catch (Exception ignored) {
+            }
+        }
+        GhostButton btnRepo = findViewById(R.id.btnRepo);
+        if (btnRepo != null) {
+            btnRepo.setLabel("打开 GitHub 仓库");
+            btnRepo.setOnClickListener(v -> openUrl("https://github.com/huoxingrNaNa/AuroraViz"));
+        }
+        GhostButton btnLicense = findViewById(R.id.btnLicense);
+        if (btnLicense != null) {
+            btnLicense.setLabel("查看 MIT 许可证");
+            btnLicense.setOnClickListener(v -> openUrl("https://github.com/huoxingrNaNa/AuroraViz/blob/main/LICENSE"));
+        }
+        TextView repoUrl = findViewById(R.id.txtRepoUrl);
+        if (repoUrl != null) {
+            repoUrl.setOnClickListener(v -> openUrl("https://github.com/huoxingrNaNa/AuroraViz"));
         }
 
         chipMic.setLabel("麦克风");
@@ -484,6 +519,8 @@ public class MainActivity extends Activity {
         btnAuth.setPalette(p);
         btnRecord.setPalette(p);
         chipMic.setPalette(p);
+        tabViz.setPalette(p);
+        tabAbout.setPalette(p);
         chipSys.setPalette(p);
         for (ChipView c : uiChips) c.setPalette(p);
         int peakMode = Prefs.peakGlow(this);
@@ -577,6 +614,24 @@ public class MainActivity extends Activity {
             shizukuHint.setText("自动开启悬浮窗 / 录音 / 通知权限");
         }
         btnAuth.invalidate();
+    }
+
+    private void showPage(int idx) {
+        if (pageViz == null || pageAbout == null) return;
+        pageViz.setVisibility(idx == 0 ? View.VISIBLE : View.GONE);
+        pageAbout.setVisibility(idx == 1 ? View.VISIBLE : View.GONE);
+        tabViz.setChecked(idx == 0);
+        tabAbout.setChecked(idx == 1);
+        tabViz.invalidate();
+        tabAbout.invalidate();
+    }
+
+    private void openUrl(String url) {
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+        } catch (Exception e) {
+            showMessage("没有可用的浏览器");
+        }
     }
 
     private void showMessage(String msg) {
@@ -759,6 +814,7 @@ public class MainActivity extends Activity {
 
     private void startOverlay(Intent resultData, int resultCode) {
         switchInPlace = false;
+        clearMessage();   // 切换/启动已发出，去掉“正在切换”之类的过程提示
         Intent i = new Intent(this, OverlayService.class)
                 .setAction(OverlayService.ACTION_START)
                 .putExtra(OverlayService.EXTRA_SOURCE, source)
