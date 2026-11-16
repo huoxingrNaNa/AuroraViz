@@ -19,6 +19,7 @@ public final class Prefs {
     private static final String K_C1 = "custom_c1";
     private static final String K_C2 = "custom_c2";
     private static final String K_IDLE = "idle_anim";
+    private static final String K_DIAG = "diag_on";
     private static final String K_ALPHA = "overlay_alpha";
     private static final String K_BARE = "overlay_bare";
     private static final String K_POSX = "overlay_x";
@@ -124,6 +125,14 @@ public final class Prefs {
 
     public static void setIdleAnim(Context c, boolean v) {
         sp(c).edit().putBoolean(K_IDLE, v).apply();
+    }
+
+    public static boolean diag(Context c) {
+        return sp(c).getBoolean(K_DIAG, true);
+    }
+
+    public static void setDiag(Context c, boolean v) {
+        sp(c).edit().putBoolean(K_DIAG, v).apply();
     }
 
     /** 悬浮窗不透明度 0.25f ~ 1.0f */

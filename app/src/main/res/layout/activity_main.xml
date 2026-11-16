@@ -430,8 +430,43 @@
                         android:textSize="9.5sp" />
                 </LinearLayout>
 
-                <Switch
+        <Switch
                     android:id="@+id/swIdle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:showText="false" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="实时诊断"
+                        android:textColor="#FFF2F5FF"
+                        android:textSize="12.5sp"
+                        android:textStyle="bold" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:tag="hint"
+                        android:text="显示帧数、电平与静音时长，用来判断有没有收到声音"
+                        android:textColor="#FF6F7896"
+                        android:textSize="9.5sp" />
+                </LinearLayout>
+                <Switch
+                    android:id="@+id/swDiag"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:showText="false" />
@@ -857,11 +892,26 @@
         android:textStyle="bold" />
 
         <TextView
-            android:id="@+id/txtRepoUrl"
+            android:id="@+id/txtSiteUrl"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:tag="hint"
+            android:text="huoxingrnana.github.io/AuroraViz"
+            android:textSize="11sp" />
+
+        <com.operit.audioviz.GhostButton
+            android:id="@+id/btnSite"
+            android:layout_width="match_parent"
+            android:layout_height="42dp"
+            android:layout_marginTop="10dp" />
+
+        <TextView
+            android:id="@+id/txtRepoUrl"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:tag="hint"
+            android:layout_marginTop="14dp"
             android:text="github.com/huoxingrNaNa/AuroraViz"
             android:textSize="11sp" />
 

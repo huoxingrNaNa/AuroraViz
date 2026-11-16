@@ -11,6 +11,7 @@ import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.graphics.LinearGradient;
 import android.graphics.Shader;
+import android.media.AudioManager;
 import android.media.projection.MediaProjectionConfig;
 import android.media.projection.MediaProjectionManager;
 import android.net.Uri;
@@ -60,6 +61,7 @@ public class MainActivity extends Activity {
     private Switch swBare;
     private boolean suppressOverlay = false;
     private Switch swIdle;
+    private Switch swDiag;
 
     private ChipView chipMic, chipSys;
     private View pageViz, pageAbout;
@@ -80,7 +82,7 @@ public class MainActivity extends Activity {
     private final Runnable diagTick = new Runnable() {
         @Override
         public void run() {
-            if (!OverlayService.isRunning()) {
+            if (!OverlayService.isRunning() || !Prefs.diag(MainActivity.this)) {
                 diag.setVisibility(View.GONE);
                 return;
             }
@@ -92,6 +94,20 @@ public class MainActivity extends Activity {
             String txt;
             if (frames == 0L) {
                 txt = "诊断：尚未收到任何音频帧（0 帧）——该应用很可能禁止被录制";
+            } else if (e.lastRmsDb() <= -119f && sil > 10000L) {
+                boolean music = false;
+                try {
+                    AudioManager am = (AudioManager) MainActivity.this.getSystemService(Context.AUDIO_SERVICE);
+                    music = am != null && am.isMusicActive();
+                } catch (Exception ignored) {
+                }
+                if (source == Prefs.SOURCE_SYSTEM) {
+                    txt = music
+                            ? "诊断：全程静音，但系统正在播放声音——该应用禁止被录制，请改用麦克风模式"
+                            : "诊断：全程静音 · 当前没有声音在播放（放首歌再看电平）";
+                } else {
+                    txt = "诊断：麦克风没有拾到声音——检查是否被其他应用占用或系统静音";
+                }
             } else {
                 txt = String.format(Locale.US,
                         "诊断：%d 帧 · 电平 %.0f dB · 静音 %s", frames, e.lastRmsDb(), silTxt);
@@ -160,6 +176,7 @@ public class MainActivity extends Activity {
         seekAlpha = findViewById(R.id.seekAlpha);
         swBare = findViewById(R.id.swBare);
         swIdle = findViewById(R.id.swIdle);
+        swDiag = findViewById(R.id.swDiag);
 
         chipMic = findViewById(R.id.chipMic);
         chipSys = findViewById(R.id.chipSys);
@@ -272,6 +289,15 @@ public class MainActivity extends Activity {
             } catch (Exception ignored) {
             }
         }
+        GhostButton btnSite = findViewById(R.id.btnSite);
+        if (btnSite != null) {
+            btnSite.setLabel("打开项目主页");
+            btnSite.setOnClickListener(v -> openUrl("https://huoxingrnana.github.io/AuroraViz/"));
+        }
+        TextView siteUrl = findViewById(R.id.txtSiteUrl);
+        if (siteUrl != null) {
+            siteUrl.setOnClickListener(v -> openUrl("https://huoxingrnana.github.io/AuroraViz/"));
+        }
         GhostButton btnRepo = findViewById(R.id.btnRepo);
         if (btnRepo != null) {
             btnRepo.setLabel("打开 GitHub 仓库");
@@ -308,7 +334,13 @@ public class MainActivity extends Activity {
             if (wasRunning) switchSourceInPlace();
         });
 
+        swDiag.setChecked(Prefs.diag(this));
+        swDiag.setOnCheckedChangeListener((bv, checked) -> {
+            Prefs.setDiag(this, checked);
+            applyDiagVisibility();
+        });
         swIdle.setChecked(Prefs.idleAnim(this));
+        applyDiagVisibility();
         preview.setIdleAnim(Prefs.idleAnim(this));
         swIdle.setOnCheckedChangeListener((buttonView, isChecked) -> {
             Prefs.setIdleAnim(this, isChecked);
@@ -554,6 +586,8 @@ public class MainActivity extends Activity {
         swOverlay.setTrackTintList(ColorStateList.valueOf(withAlpha(sc2, 0.45f)));
         swIdle.setThumbTintList(ColorStateList.valueOf(sc1));
         swIdle.setTrackTintList(ColorStateList.valueOf(withAlpha(sc2, 0.45f)));
+        swDiag.setThumbTintList(ColorStateList.valueOf(sc1));
+        swDiag.setTrackTintList(ColorStateList.valueOf(withAlpha(sc2, 0.45f)));
 
         updateAudioHint();
         applyTitleGradient();
@@ -614,6 +648,16 @@ public class MainActivity extends Activity {
             shizukuHint.setText("自动开启悬浮窗 / 录音 / 通知权限");
         }
         btnAuth.invalidate();
+    }
+
+    private void applyDiagVisibility() {
+        if (diag == null) return;
+        uiHandler.removeCallbacks(diagTick);
+        if (Prefs.diag(this)) {
+            uiHandler.post(diagTick);
+        } else {
+            diag.setVisibility(View.GONE);
+        }
     }
 
     private void showPage(int idx) {
