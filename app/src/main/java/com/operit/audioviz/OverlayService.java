@@ -80,6 +80,14 @@ public class OverlayService extends Service {
         wm = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
     }
 
+    /** 双声道只对柱状/示波生效，其余样式一律单声道 */
+    private int curStereoMode() {
+        int st = Prefs.style(this);
+        boolean ok = (st == Style.COLUMN.ordinal() || st == Style.SCOPE.ordinal())
+                && Prefs.stereoOn(this);
+        return ok ? Prefs.stereoMode(this) + 1 : 0;
+    }
+
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent != null && ACTION_STOP.equals(intent.getAction())) {
@@ -112,6 +120,8 @@ public class OverlayService extends Service {
                     viz.setDrawBackground(!Prefs.bare(this));
                     viz.setPeakMode(Prefs.peakGlow(this));
                     viz.setIdleAnim(Prefs.idleAnim(this));
+                    viz.setFreqAxis(Prefs.freqAxis(this));
+            viz.setStereo(curStereoMode());
         viz.setSmoothTau(Prefs.vizSmoothTau(this));
         viz.setRenderHz(Prefs.vizHzValue(Prefs.vizHz(this)));
                     viz.setSmoothTau(Prefs.vizSmoothTau(this));
@@ -158,6 +168,28 @@ public class OverlayService extends Service {
     }
 
     /** 隐藏悬浮窗但保持监听运行 */
+    /** 松手后离屏幕边不足 24dp 就贴边，省得手动对齐 */
+    private void snapToEdges() {
+        if (params == null || overlayView == null) return;
+        android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+        int sw = dm.widthPixels;
+        int sh = dm.heightPixels;
+        int m = dp(24);
+        int nx = params.x;
+        int ny = params.y;
+        if (nx < m) nx = 0;
+        else if (nx + params.width > sw - m) nx = Math.max(0, sw - params.width);
+        if (ny < m) ny = 0;
+        else if (ny + params.height > sh - m) ny = Math.max(0, sh - params.height);
+        if (nx == params.x && ny == params.y) return;
+        params.x = nx;
+        params.y = ny;
+        try {
+            wm.updateViewLayout(overlayView, params);
+        } catch (Exception ignored) {
+        }
+    }
+
     private void hideOverlayKeepRunning() {
         Prefs.setOverlayEnabled(this, false);
         hideOverlay();
@@ -349,6 +381,8 @@ public class OverlayService extends Service {
         viz.setShowModeLabel(true);
         viz.setPeakMode(Prefs.peakGlow(this));
         viz.setIdleAnim(Prefs.idleAnim(this));
+        viz.setFreqAxis(Prefs.freqAxis(this));
+        viz.setStereo(curStereoMode());
         viz.setStyle(Style.byIndex(Prefs.style(this)));
         viz.setPalette(Palette.byIndex(Prefs.palette(this)));
         overlayView.addView(viz, new FrameLayout.LayoutParams(
@@ -469,6 +503,7 @@ public class OverlayService extends Service {
                 float adx = Math.abs(e.getRawX() - downRawX);
                 float ady = Math.abs(e.getRawY() - downRawY);
                 if (dragMoved || adx >= dp(6) || ady >= dp(6)) {
+                    snapToEdges();
                     // 记住位置，下次启动直接恢复
                     Prefs.setPos(this, params.x, params.y);
                 } else {

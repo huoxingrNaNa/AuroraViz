@@ -12,6 +12,9 @@ public final class Prefs {
     private static final String K_SOURCE = "source";
     private static final String K_SIZE = "size";
     private static final String K_SENS = "sens";
+    private static final String K_AUTO_SENS = "auto_sens";
+    private static final String K_FREQ_AXIS = "freq_axis";
+    private static final String K_STEREO_LOG = "stereo_log";
     private static final String K_OVERLAY = "overlay_on";
     private static final String K_UI_STYLE = "ui_style";
     private static final String K_PEAK = "peak_glow";
@@ -20,6 +23,8 @@ public final class Prefs {
     private static final String K_C2 = "custom_c2";
     private static final String K_IDLE = "idle_anim";
     private static final String K_DIAG = "diag_on";
+    private static final String K_STEREO = "stereo_on";
+    private static final String K_STEREO_MODE = "stereo_mode";
     private static final String K_ALPHA = "overlay_alpha";
     private static final String K_BARE = "overlay_bare";
     private static final String K_POSX = "overlay_x";
@@ -82,6 +87,30 @@ public final class Prefs {
     public static void setSens(Context c, float v) {
         sp(c).edit().putFloat(K_SENS, v).apply();
     }
+    public static boolean autoSens(Context c) {
+        return sp(c).getBoolean(K_AUTO_SENS, true);
+    }
+
+    public static void setAutoSens(Context c, boolean v) {
+        sp(c).edit().putBoolean(K_AUTO_SENS, v).apply();
+    }
+    public static boolean freqAxis(Context c) {
+        return sp(c).getBoolean(K_FREQ_AXIS, false);
+    }
+
+    public static boolean stereoLog(Context c) {
+        return sp(c).getBoolean(K_STEREO_LOG, false);
+    }
+
+    public static void setStereoLog(Context c, boolean v) {
+        sp(c).edit().putBoolean(K_STEREO_LOG, v).apply();
+    }
+
+    public static void setFreqAxis(Context c, boolean v) {
+        sp(c).edit().putBoolean(K_FREQ_AXIS, v).apply();
+    }
+
+
 
     /** 是否显示悬浮窗（关闭时只在应用内可视化） */
     public static boolean overlayEnabled(Context c) {
@@ -133,6 +162,24 @@ public final class Prefs {
 
     public static void setDiag(Context c, boolean v) {
         sp(c).edit().putBoolean(K_DIAG, v).apply();
+    }
+
+    /** 双声道可视化开关 */
+    public static boolean stereoOn(Context c) {
+        return sp(c).getBoolean(K_STEREO, false);
+    }
+
+    public static void setStereoOn(Context c, boolean v) {
+        sp(c).edit().putBoolean(K_STEREO, v).apply();
+    }
+
+    /** 双声道布局：0=上下 1=左右 2=叠加 */
+    public static int stereoMode(Context c) {
+        return sp(c).getInt(K_STEREO_MODE, 0);
+    }
+
+    public static void setStereoMode(Context c, int v) {
+        sp(c).edit().putInt(K_STEREO_MODE, v).apply();
     }
 
     /** 悬浮窗不透明度 0.25f ~ 1.0f */

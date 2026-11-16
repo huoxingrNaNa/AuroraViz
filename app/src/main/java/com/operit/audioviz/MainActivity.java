@@ -55,13 +55,23 @@ public class MainActivity extends Activity {
     private GhostButton btnRecord;
     private final VideoRecorder recorder = new VideoRecorder();
     private SeekBar seekSize;
+    private ChipView[] sizeChips;
+    /** 悬浮窗三档预设：宽 300dp × 该倍数 */
+    private static final float[] SIZE_PRESETS = {0.5333f, 1.0f, 1.7333f};
     private SeekBar seekSens;
     private Switch swOverlay;
     private SeekBar seekAlpha;
     private Switch swBare;
+    private Switch swAutoSens;
+    private Switch swFreqAxis;
+    private Switch swStereoLog;
     private boolean suppressOverlay = false;
     private Switch swIdle;
     private Switch swDiag;
+    private Switch swStereo;
+    private android.view.View stereoTitleRow;
+    private android.widget.LinearLayout stereoRow;
+    private ChipView[] stereoChips;
 
     private ChipView chipMic, chipSys;
     private View pageViz, pageAbout;
@@ -109,8 +119,10 @@ public class MainActivity extends Activity {
                     txt = "诊断：麦克风没有拾到声音——检查是否被其他应用占用或系统静音";
                 }
             } else {
+                int pct = preview != null ? preview.lastBarPct() : 0;
                 txt = String.format(Locale.US,
-                        "诊断：%d 帧 · 电平 %.0f dB · 静音 %s", frames, e.lastRmsDb(), silTxt);
+                        "诊断：%d 帧 · 电平 %.0f dB · 柱高 %d%% · 静音 %s",
+                        frames, e.lastRmsDb(), pct, silTxt);
             }
             diag.setText(txt);
             diag.setVisibility(View.VISIBLE);
@@ -171,12 +183,20 @@ public class MainActivity extends Activity {
         btnAuth = findViewById(R.id.btnAuth);
         btnRecord = findViewById(R.id.btnRecord);
         seekSize = findViewById(R.id.seekSize);
+        sizeChips = new ChipView[]{findViewById(R.id.ovl0), findViewById(R.id.ovl1),
+                findViewById(R.id.ovl2)};
         seekSens = findViewById(R.id.seekSens);
         swOverlay = findViewById(R.id.swOverlay);
         seekAlpha = findViewById(R.id.seekAlpha);
         swBare = findViewById(R.id.swBare);
+        swAutoSens = findViewById(R.id.swAutoSens);
+        swFreqAxis = findViewById(R.id.swFreqAxis);
+        swStereoLog = findViewById(R.id.swStereoLog);
         swIdle = findViewById(R.id.swIdle);
         swDiag = findViewById(R.id.swDiag);
+        swStereo = findViewById(R.id.swStereo);
+        stereoRow = findViewById(R.id.stereoRow);
+        stereoTitleRow = findViewById(R.id.stereoTitleRow);
 
         chipMic = findViewById(R.id.chipMic);
         chipSys = findViewById(R.id.chipSys);
@@ -184,6 +204,21 @@ public class MainActivity extends Activity {
                 findViewById(R.id.st0), findViewById(R.id.st1), findViewById(R.id.st2),
                 findViewById(R.id.st3), findViewById(R.id.st4), findViewById(R.id.st5)
         };
+        stereoChips = new ChipView[]{
+                findViewById(R.id.sm0), findViewById(R.id.sm1), findViewById(R.id.sm2)
+        };
+        stereoChips[0].setLabel("上下");
+        stereoChips[1].setLabel("左右");
+        stereoChips[2].setLabel("叠加");
+        for (int i = 0; i < stereoChips.length; i++) {
+            final int idx = i;
+            stereoChips[i].setOnClickListener(v -> {
+                Prefs.setStereoMode(this, idx);
+                preview.setStereo(curStereoMode());
+                applySelections();
+                syncOverlay();
+            });
+        }
         swatches = new SwatchView[]{
                 findViewById(R.id.sw0), findViewById(R.id.sw1), findViewById(R.id.sw2),
                 findViewById(R.id.sw3), findViewById(R.id.sw4), findViewById(R.id.sw5),
@@ -212,6 +247,7 @@ public class MainActivity extends Activity {
             });
         }
         preview.setPeakMode(Prefs.peakGlow(this));
+        preview.setStereo(curStereoMode());
         preview.setSmoothTau(Prefs.vizSmoothTau(this));
         // 可视化帧率（只影响重绘频率，不影响导出视频帧率）
         hzChips = new ChipView[]{findViewById(R.id.vz0), findViewById(R.id.vz1),
@@ -339,6 +375,16 @@ public class MainActivity extends Activity {
             Prefs.setDiag(this, checked);
             applyDiagVisibility();
         });
+
+        swStereo.setChecked(Prefs.stereoOn(this));
+        swStereo.setOnCheckedChangeListener((bv, checked) -> {
+            Prefs.setStereoOn(this, checked);
+            updateStereoRow();
+            preview.setStereo(curStereoMode());
+            applySelections();
+            syncOverlay();
+        });
+        updateStereoRow();
         swIdle.setChecked(Prefs.idleAnim(this));
         applyDiagVisibility();
         preview.setIdleAnim(Prefs.idleAnim(this));
@@ -371,12 +417,24 @@ public class MainActivity extends Activity {
             }
         });
 
+        String[] sizeLabels = {"小", "中", "大"};
+        for (int i = 0; i < sizeChips.length; i++) {
+            final int idx = i;
+            sizeChips[i].setLabel(sizeLabels[i]);
+            sizeChips[i].setOnClickListener(v -> {
+                Prefs.setSize(MainActivity.this, SIZE_PRESETS[idx]);
+                seekSize.setProgress(sizeToProgress(SIZE_PRESETS[idx]));
+                syncSizeChips();
+                syncOverlay();
+            });
+        }
         seekSize.setMax(100);
         seekSize.setProgress(sizeToProgress(Prefs.size(this)));
         seekSize.setOnSeekBarChangeListener(new SimpleSeekListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 Prefs.setSize(MainActivity.this, progressToSize(progress));
+                syncSizeChips();
             }
         });
 
@@ -396,6 +454,25 @@ public class MainActivity extends Activity {
             syncOverlay();
         });
 
+        swStereoLog.setChecked(Prefs.stereoLog(this));
+        AudioEngine.get().setStereoLog(Prefs.stereoLog(this));
+        swStereoLog.setOnCheckedChangeListener((bv, checked) -> {
+            Prefs.setStereoLog(MainActivity.this, checked);
+            AudioEngine.get().setStereoLog(checked);
+        });
+        swFreqAxis.setChecked(Prefs.freqAxis(this));
+        preview.setFreqAxis(Prefs.freqAxis(this));
+        swFreqAxis.setOnCheckedChangeListener((bv, checked) -> {
+            Prefs.setFreqAxis(MainActivity.this, checked);
+            preview.setFreqAxis(checked);
+            syncOverlay();
+        });
+        swAutoSens.setChecked(Prefs.autoSens(this));
+        AudioEngine.get().setAutoSens(Prefs.autoSens(this));
+        swAutoSens.setOnCheckedChangeListener((bv, checked) -> {
+            Prefs.setAutoSens(MainActivity.this, checked);
+            AudioEngine.get().setAutoSens(checked);
+        });
         seekSens.setMax(100);
         seekSens.setProgress(sensToProgress(Prefs.sens(this)));
         seekSens.setOnSeekBarChangeListener(new SimpleSeekListener() {
@@ -538,12 +615,28 @@ public class MainActivity extends Activity {
         return 0.25f + 0.75f * (p / 100f);
     }
 
+    /** 尺寸滑块靠近某个预设值时点亮对应档位，手拖后三档都不亮 */
+    private void syncSizeChips() {
+        if (sizeChips == null) return;
+        float cur = Prefs.size(this);
+        for (int i = 0; i < sizeChips.length; i++) {
+            sizeChips[i].setChecked(Math.abs(cur - SIZE_PRESETS[i]) < 0.01f);
+        }
+    }
+
     private void applySelections() {
         Palette p = Palette.byIndex(paletteIdx);
         Style s = Style.byIndex(styleIdx);
         int[] sc = Scheme.colors(this, p);
         int sc0 = sc[0], sc1 = sc[1], sc2 = sc[2];
 
+        if (sizeChips != null) {
+            int[] scChip = Scheme.colors(this, p);
+            for (ChipView c : sizeChips) {
+                c.setPalette(p);
+            }
+            syncSizeChips();
+        }
         preview.setStyle(s);
         preview.setPalette(p);
         preview.setShowModeLabel(true);
@@ -566,6 +659,15 @@ public class MainActivity extends Activity {
             styleChips[i].setPalette(p);
             styleChips[i].setChecked(i == styleIdx);
         }
+        if (stereoChips != null) {
+            int sm = Prefs.stereoMode(this);
+            for (int i = 0; i < stereoChips.length; i++) {
+                stereoChips[i].setPalette(p);
+                stereoChips[i].setChecked(i == sm);
+            }
+        }
+        updateStereoRow();
+        preview.setStereo(curStereoMode());
         for (int i = 0; i < swatches.length; i++) {
             swatches[i].setChecked(i == paletteIdx);
         }
@@ -588,6 +690,8 @@ public class MainActivity extends Activity {
         swIdle.setTrackTintList(ColorStateList.valueOf(withAlpha(sc2, 0.45f)));
         swDiag.setThumbTintList(ColorStateList.valueOf(sc1));
         swDiag.setTrackTintList(ColorStateList.valueOf(withAlpha(sc2, 0.45f)));
+        swStereo.setThumbTintList(ColorStateList.valueOf(sc1));
+        swStereo.setTrackTintList(ColorStateList.valueOf(withAlpha(sc2, 0.45f)));
 
         updateAudioHint();
         applyTitleGradient();
@@ -685,6 +789,35 @@ public class MainActivity extends Activity {
 
     private void clearMessage() {
         message.setVisibility(View.GONE);
+    }
+
+    /** 双声道只对柱状、示波两种线性布局有意义 */
+    private boolean stereoSupported() {
+        return styleIdx == Style.COLUMN.ordinal() || styleIdx == Style.SCOPE.ordinal();
+    }
+
+    /** 当前应该交给可视化视图的双声道模式：0=关闭 */
+    private int curStereoMode() {
+        if (!stereoSupported() || !Prefs.stereoOn(this)) return 0;
+        return Prefs.stereoMode(this) + 1;
+    }
+
+    /** 双声道整行的可见性 + 布局选择的可见性 */
+    private void updateStereoRow() {
+        if (swStereo == null) return;
+        boolean supported = stereoSupported();
+        if (stereoTitleRow != null) {
+            stereoTitleRow.setVisibility(supported ? View.VISIBLE : View.GONE);
+        }
+        if (stereoRow != null) {
+            stereoRow.setVisibility(supported && swStereo.isChecked() ? View.VISIBLE : View.GONE);
+        }
+        int mode = Prefs.stereoMode(this);
+        if (stereoChips != null) {
+            for (int i = 0; i < stereoChips.length; i++) {
+                stereoChips[i].setChecked(i == mode);
+            }
+        }
     }
 
     private void syncOverlay() {
