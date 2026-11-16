@@ -104,8 +104,10 @@
   }
   .stage canvas{display:block;width:100%;height:clamp(180px,30vw,300px)}
   .stage .tagline{
-    position:absolute;left:16px;bottom:12px;font-size:11px;color:var(--dim2);
-    letter-spacing:.6px;text-transform:uppercase;
+    position:absolute;right:14px;top:10px;font-size:10.5px;color:var(--dim2);
+    letter-spacing:.3px;opacity:.6;pointer-events:none;white-space:nowrap;
+    padding:3px 8px;border-radius:999px;
+    background:rgba(5,6,15,.42);border:1px solid rgba(255,255,255,.06);
   }
 
   /* ---------- sections ---------- */
@@ -228,7 +230,7 @@
 
     <div class="stage">
       <canvas id="viz" aria-label="频谱可视化动画"></canvas>
-      <span class="tagline">示意动画 · 非实际录制画面</span>
+      <span class="tagline">页面演示动画 · 实际效果随设备与音频而异</span>
     </div>
   </div>
 
