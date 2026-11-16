@@ -62,6 +62,8 @@ public class MainActivity extends Activity {
     private Switch swIdle;
 
     private ChipView chipMic, chipSys;
+    /** 正在监听时切换音源（拿完授权/权限后原地重启采集） */
+    private boolean switchInPlace = false;
     private ChipView[] styleChips;
     private ChipView[] uiChips;
     private ChipView[] pkChips;
@@ -253,17 +255,22 @@ public class MainActivity extends Activity {
         chipMic.setLabel("麦克风");
         chipSys.setLabel("系统音频");
         chipMic.setOnClickListener(v -> {
+            boolean wasRunning = OverlayService.isRunning();
             source = Prefs.SOURCE_MIC;
             Prefs.setSource(this, source);
             applySelections();
+            if (wasRunning) switchSourceInPlace();
         });
         chipSys.setOnClickListener(v -> {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                showMessage("系统音频捕获需要 Android 10 及以上");
+                return;
+            }
+            boolean wasRunning = OverlayService.isRunning();
             source = Prefs.SOURCE_SYSTEM;
             Prefs.setSource(this, source);
             applySelections();
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-                showMessage("系统音频捕获需要 Android 10 及以上");
-            }
+            if (wasRunning) switchSourceInPlace();
         });
 
         swIdle.setChecked(Prefs.idleAnim(this));
@@ -715,6 +722,13 @@ public class MainActivity extends Activity {
         continueStart();
     }
 
+    /** 运行中切换音源：走与“开始监听”相同的授权流程，服务端做原地重启 */
+    private void switchSourceInPlace() {
+        switchInPlace = true;
+        showMessage("正在切换音源…");
+        continueStart();
+    }
+
     private void continueStart() {
         if (source == Prefs.SOURCE_SYSTEM) {
             MediaProjectionManager mpm =
@@ -744,6 +758,7 @@ public class MainActivity extends Activity {
     }
 
     private void startOverlay(Intent resultData, int resultCode) {
+        switchInPlace = false;
         Intent i = new Intent(this, OverlayService.class)
                 .setAction(OverlayService.ACTION_START)
                 .putExtra(OverlayService.EXTRA_SOURCE, source)
@@ -781,8 +796,10 @@ public class MainActivity extends Activity {
         if (requestCode == REQ_PROJECTION) {
             if (resultCode == RESULT_OK && data != null) {
                 Prefs.setSource(this, Prefs.SOURCE_SYSTEM);
+                switchInPlace = false;
                 startOverlay(data, resultCode);
             } else {
+                switchInPlace = false;
                 showMessage("已取消屏幕录制授权，无法捕获系统音频");
             }
         }
@@ -795,8 +812,9 @@ public class MainActivity extends Activity {
         boolean granted = grantResults.length > 0
                 && grantResults[0] == PackageManager.PERMISSION_GRANTED;
         if (requestCode == REQ_MIC) {
-            if (granted && pendingStart) {
+            if (granted && (pendingStart || switchInPlace)) {
                 pendingStart = false;
+                switchInPlace = false;
                 startOverlay(null, 0);
             } else if (!granted) {
                 pendingStart = false;

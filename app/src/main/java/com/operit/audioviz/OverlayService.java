@@ -127,6 +127,10 @@ public class OverlayService extends Service {
                 ? intent.getIntExtra(EXTRA_SOURCE, Prefs.SOURCE_MIC)
                 : Prefs.SOURCE_MIC;
 
+        if (running) {
+            // 热切换：已在监听中，先释放旧的采集源（服务/通知/浮窗都保留）
+            stopCaptureOnly();
+        }
         startForegroundCompat(source);
 
         boolean ok;
@@ -501,6 +505,23 @@ public class OverlayService extends Service {
     }
 
     // ------------------------------------------------------------ 清理
+
+    /** 只停采集（引擎 + 投屏会话），服务与浮窗继续存在，用于切换音源 */
+    private void stopCaptureOnly() {
+        AudioEngine.get().stop();
+        releaseVirtualDisplay();
+        if (projection != null) {
+            try {
+                if (projectionCallback != null) {
+                    projection.unregisterCallback(projectionCallback);
+                }
+                projection.stop();
+            } catch (Exception ignored) {
+            }
+            projection = null;
+            projectionCallback = null;
+        }
+    }
 
     private void shutdown() {
         AudioEngine.get().stop();
