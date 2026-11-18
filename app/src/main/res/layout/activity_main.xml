@@ -175,6 +175,17 @@
             android:textColor="#FF6F7896"
             android:textSize="9sp"
             android:visibility="gone" />
+        <TextView
+            android:id="@+id/analysisText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:lineSpacingExtra="2dp"
+            android:tag="hint"
+            android:text=""
+            android:textColor="#FF7E8AAE"
+            android:textSize="9sp"
+            android:visibility="gone" />
 
         <!-- 模式 -->
         <TextView
@@ -531,7 +542,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="3dp"
                         android:tag="hint"
-                        android:text="显示帧数、电平与静音时长，用来判断有没有收到声音"
+                        android:text="在设置页显示帧数、电平、LUFS、节拍、音高与削波提示"
                         android:textColor="#FF6F7896"
                         android:textSize="9.5sp" />
                 </LinearLayout>
@@ -542,36 +553,27 @@
                     android:showText="false" />
             </LinearLayout>
 
+            <com.operit.audioviz.GhostButton
+                android:id="@+id/btnDiagExport"
+                android:layout_width="match_parent"
+                android:layout_height="42dp"
+                android:layout_marginTop="10dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:tag="hint"
+                android:text="把最近 5 分钟的电平、节拍、音高记录导出成文本，可直接分享出去"
+                android:textColor="#FF6F7896"
+                android:textSize="9.5sp" />
+
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="声道诊断日志"
-                        android:textColor="#FFF2F5FF"
-                        android:textSize="12.5sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="3dp"
-                        android:tag="hint"
-                        android:text="每秒往 logcat 写一条左右电平，排查双声道时再打开"
-                        android:textColor="#FF6F7896"
-                        android:textSize="9.5sp" />
-                </LinearLayout>
 
                 <Switch
                     android:id="@+id/swStereoLog"

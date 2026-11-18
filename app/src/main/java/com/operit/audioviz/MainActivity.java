@@ -49,6 +49,7 @@ public class MainActivity extends Activity {
     private TextView audioHint;
     private TextView mainHint;
     private TextView diag;
+    private TextView analysisText;
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
     private GradientButton btnToggle;
     private GhostButton btnAuth;
@@ -64,11 +65,11 @@ public class MainActivity extends Activity {
     private Switch swBare;
     private Switch swAutoSens;
     private Switch swFreqAxis;
-    private Switch swStereoLog;
     private Switch swModeLabel;
     private boolean suppressOverlay = false;
     private Switch swIdle;
     private Switch swDiag;
+    private GhostButton btnDiagExport;
     private Switch swStereo;
     private android.view.View stereoTitleRow;
     private android.widget.LinearLayout stereoRow;
@@ -89,12 +90,14 @@ public class MainActivity extends Activity {
     private int styleIdx;
     private int paletteIdx;
     private boolean pendingStart = false;
+    // 削波判定交给 AudioAnalysis.clipWarn()：连续满刻度采样才报
 
     private final Runnable diagTick = new Runnable() {
         @Override
         public void run() {
             if (!OverlayService.isRunning() || !Prefs.diag(MainActivity.this)) {
                 diag.setVisibility(View.GONE);
+                if (analysisText != null) analysisText.setVisibility(View.GONE);
                 return;
             }
             AudioEngine e = AudioEngine.get();
@@ -125,11 +128,42 @@ public class MainActivity extends Activity {
                         "诊断：%d 帧 · 电平 %.0f dB · 柱高 %d%% · 静音 %s",
                         frames, e.lastRmsDb(), pct, silTxt);
             }
+            String anaLine = analysisLine();
+            AudioAnalysis aa = AudioEngine.get().analysis();
+            boolean hot = aa.clipWarn();
+            android.util.Log.i("AuroraViz", "ana " + anaLine
+                    + (hot ? "  CLIP!" : ""));
             diag.setText(txt);
             diag.setVisibility(View.VISIBLE);
+            if (analysisText != null) {
+                analysisText.setText(hot ? anaLine + "\u3000⚠ 削波" : anaLine);
+                analysisText.setTextColor(hot ? 0xFFFF7A7A : 0xFF7E8AAE);
+                analysisText.setVisibility(View.VISIBLE);
+            }
             uiHandler.postDelayed(this, 1000L);
         }
     };
+
+    /** 响度 / 节拍 / 音高一行摘要 */
+    private String analysisLine() {
+        AudioAnalysis a = AudioEngine.get().analysis();
+        String bpmTxt = a.bpm() > 0f ? String.format(Locale.US, "%.0f", a.bpm()) : "—";
+        if (a.bpm() > 0f && a.bpmAlt() > 0f) {
+            // 半速/倍速歧义：把另一层拍放在括号里，避免只给一个可能错的值
+            bpmTxt = String.format(Locale.US, "%.0f (%.0f)", a.bpm(), a.bpmAlt());
+        }
+        String pitchTxt;
+        if (a.hasPitch() && a.noteName().length() > 0) {
+            int c = a.noteCents();
+            pitchTxt = String.format(Locale.US, "%s %s%d¢ · %.1f Hz",
+                    a.noteName(), c >= 0 ? "+" : "-", Math.abs(c), a.pitchHz());
+        } else {
+            pitchTxt = "—";
+        }
+        return String.format(Locale.US,
+                "电平 %.1f dBFS · 峰值 %.1f · 短时 %.1f LUFS\n节拍 %s BPM · 音高 %s",
+                a.shortDb(), a.peakDb(), a.lufsApprox(), bpmTxt, pitchTxt);
+    }
 
     private final Shizuku.OnRequestPermissionResultListener shizukuListener =
             (requestCode, grantResult) -> {
@@ -176,6 +210,7 @@ public class MainActivity extends Activity {
         preview.setLabelTopDp(38f);
         preview.setLabelRightDp(14f);
         stateText = findViewById(R.id.stateText);
+        analysisText = findViewById(R.id.analysisText);
         message = findViewById(R.id.message);
         statusShizuku = findViewById(R.id.statusShizuku);
         shizukuHint = findViewById(R.id.shizukuHint);
@@ -195,10 +230,12 @@ public class MainActivity extends Activity {
         swBare = findViewById(R.id.swBare);
         swAutoSens = findViewById(R.id.swAutoSens);
         swFreqAxis = findViewById(R.id.swFreqAxis);
-        swStereoLog = findViewById(R.id.swStereoLog);
         swModeLabel = findViewById(R.id.swModeLabel);
         swIdle = findViewById(R.id.swIdle);
         swDiag = findViewById(R.id.swDiag);
+        btnDiagExport = findViewById(R.id.btnDiagExport);
+        btnDiagExport.setLabel("导出诊断日志");
+        btnDiagExport.setOnClickListener(v -> exportDiagLog());
         swStereo = findViewById(R.id.swStereo);
         stereoRow = findViewById(R.id.stereoRow);
         stereoTitleRow = findViewById(R.id.stereoTitleRow);
@@ -378,6 +415,7 @@ public class MainActivity extends Activity {
         swDiag.setChecked(Prefs.diag(this));
         swDiag.setOnCheckedChangeListener((bv, checked) -> {
             Prefs.setDiag(this, checked);
+            // 日志常开（对用户不可见，不设开关）；这个开关只管界面那行文字
             applyDiagVisibility();
         });
 
@@ -463,12 +501,6 @@ public class MainActivity extends Activity {
         swModeLabel.setOnCheckedChangeListener((bv, checked) -> {
             Prefs.setModeLabel(MainActivity.this, checked);
             syncOverlay();
-        });
-        swStereoLog.setChecked(Prefs.stereoLog(this));
-        AudioEngine.get().setStereoLog(Prefs.stereoLog(this));
-        swStereoLog.setOnCheckedChangeListener((bv, checked) -> {
-            Prefs.setStereoLog(MainActivity.this, checked);
-            AudioEngine.get().setStereoLog(checked);
         });
         swFreqAxis.setChecked(Prefs.freqAxis(this));
         preview.setFreqAxis(Prefs.freqAxis(this));
@@ -653,6 +685,7 @@ public class MainActivity extends Activity {
         btnToggle.setPalette(p);
         btnAuth.setPalette(p);
         btnRecord.setPalette(p);
+        btnDiagExport.setPalette(p);
         chipMic.setPalette(p);
         tabViz.setPalette(p);
         tabAbout.setPalette(p);
@@ -789,6 +822,26 @@ public class MainActivity extends Activity {
             startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
         } catch (Exception e) {
             showMessage("没有可用的浏览器");
+        }
+    }
+
+    /** 把环形缓冲写成文本，走系统分享（微信/文件管理器/邮件都行） */
+    private void exportDiagLog() {
+        java.io.File f = DiagLog.writeReport(this);
+        if (f == null) {
+            showMessage("导出失败");
+            return;
+        }
+        try {
+            Uri uri = DiagProvider.uriFor(f.getName());
+            Intent send = new Intent(Intent.ACTION_SEND);
+            send.setType("text/plain");
+            send.putExtra(Intent.EXTRA_STREAM, uri);
+            send.putExtra(Intent.EXTRA_SUBJECT, "AuroraViz 诊断日志");
+            send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(Intent.createChooser(send, "导出诊断日志"));
+        } catch (Throwable t) {
+            showMessage("分享失败：" + t.getClass().getSimpleName());
         }
     }
 

@@ -2,7 +2,7 @@
 
 Android 音频可视化应用：**悬浮窗 + 应用内双通道显示**，纯 Java 原生 Canvas 绘制，无第三方图形库。
 
-> 版本：v4.0 (versionCode 30) · minSdk 26 / targetSdk 34 · 单 APK 约 122 KB
+> 版本：v8.6 (versionCode 81) · minSdk 26 / targetSdk 34 · 单 APK 约 158 KB
 
 <img src="docs/screenshot.jpg" width="340" alt="截图">
 
@@ -211,6 +211,7 @@ paint.setShader(gradient);           // 渐变亮度被乘上 7.8% → 看起来
 | 8.3 | 浮窗标签上移到绘图框线之外 |
 | 8.4 | 标签位置按宿主分开：应用内在右上（状态行下一行）、浮窗在顶部居中 |
 | 8.5 | 修复关闭频率标注后浮窗标签落回右下、压住柱身与下层文字 |
+| 8.6 | 新增响度表（RMS / 峰值 / 短时 LUFS）、节拍 BPM（带半速/倍速备选值）、音高音名与音分；修复 BPM 倍频误判、音高乱跳与边界伪峰、削波误报、停播后读数残留；诊断日志改为常开并支持一键导出分享 |
 
 ---
 

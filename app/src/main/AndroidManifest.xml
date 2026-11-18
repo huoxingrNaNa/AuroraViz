@@ -37,6 +37,11 @@
             android:foregroundServiceType="microphone|mediaProjection" />
 
         <provider
+            android:name=".DiagProvider"
+            android:authorities="com.operit.audioviz.diag"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+        <provider
             android:name="rikka.shizuku.ShizukuProvider"
             android:authorities="${applicationId}.shizuku"
             android:enabled="true"

@@ -50,7 +50,8 @@ public final class AudioEngine {
     private volatile boolean stereoCapture;
     // ---- 临时诊断：每秒输出一次左右声道电平，用于判断"双声道为什么看不出差别" ----
     /** 声道诊断日志开关（默认关，排查双声道问题时才打开，避免一直刷 logcat） */
-    private volatile boolean stereoLog = false;
+    // 日志常开：这是开发者诊断通道，不做成用户可见的开关
+    private volatile boolean stereoLog = true;
     private long lastStereoLogMs = 0L;
     private double accL = 0, accR = 0, accN = 0;
     /** 采集线程独占的频谱临时缓冲 */
@@ -68,6 +69,8 @@ public final class AudioEngine {
     private volatile long lastLoudAt;
     private volatile long frames;
     private volatile float lastRmsDb = -120f;
+    /** 响度 / 节拍 / 音高分析 */
+    private final AudioAnalysis analysis = new AudioAnalysis();
     private volatile float sensitivity = 1.0f;
     /** 自动灵敏度：把最强频段拉到目标的固定高度，用户滑块变成整体偏好 */
     private volatile boolean autoSensOn = true;
@@ -208,6 +211,7 @@ public final class AudioEngine {
             return false;
         }
         stop();
+        analysis.setLogEnabled(true);
         record = createRecord(MediaRecorder.AudioSource.MIC, null);
         if (record == null) return false;
         return begin();
@@ -217,6 +221,7 @@ public final class AudioEngine {
     public synchronized boolean startPlaybackCapture(Context ctx, MediaProjection projection) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || projection == null) return false;
         stop();
+        analysis.setLogEnabled(true);
         AudioPlaybackCaptureConfiguration config =
                 new AudioPlaybackCaptureConfiguration.Builder(projection)
                         .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
@@ -258,8 +263,10 @@ public final class AudioEngine {
                 if (r != null && r.getState() == AudioRecord.STATE_INITIALIZED) {
                     captureChannels = ch;
                     if (stereoLog) {
-                        android.util.Log.i("AuroraViz", "record ok ch=" + ch
-                                + (config != null ? " playback" : " src=" + audioSource));
+                        String okLine = "record ok ch=" + ch
+                                + (config != null ? " playback" : " src=" + audioSource);
+                        android.util.Log.i("AuroraViz", okLine);
+                        DiagLog.add(okLine);
                     }
                     return r;
                 }
@@ -308,6 +315,23 @@ public final class AudioEngine {
     // ---------------------------------------------------------------- 采集循环
 
     private void loop() {
+        // 看门狗：无播放时 record.read() 阻塞，analysis 收不到数据，
+        // BPM / 音高会残留。每 500ms 检查一次，超时就清空瞬时读数。
+        Thread dog = new Thread(() -> {
+            while (running) {
+                try {
+                    Thread.sleep(500L);
+                } catch (InterruptedException ie) {
+                    return;
+                }
+                try {
+                    analysis.idle();
+                } catch (Throwable ignored) {
+                }
+            }
+        }, "aurora-watch");
+        dog.setDaemon(true);
+        dog.start();
         Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO);
         final int ch = Math.max(1, captureChannels);
         short[] buf = new short[FFT_SIZE * ch];
@@ -462,6 +486,10 @@ public final class AudioEngine {
         }
 
         lastFrameAt = now;
+        try {
+            analysis.feed(buf, count, sampleRate);
+        } catch (Throwable ignored) {
+        }
     }
 
     // ---------------------------------------------------------------- 读取
@@ -545,8 +573,10 @@ public final class AudioEngine {
             lastStereoLogMs = tnow;
             double lDb = 10.0 * Math.log10(accL / accN / (32768.0 * 32768.0) + 1e-12);
             double rDb = 10.0 * Math.log10(accR / accN / (32768.0 * 32768.0) + 1e-12);
-            android.util.Log.i("AuroraViz", String.format(
-                    "stereo ch=%d L=%.1fdB R=%.1fdB diff=%.2fdB", ch, lDb, rDb, Math.abs(lDb - rDb)));
+            String stLine = String.format(
+                    "stereo ch=%d L=%.1fdB R=%.1fdB diff=%.2fdB", ch, lDb, rDb, Math.abs(lDb - rDb));
+            android.util.Log.i("AuroraViz", stLine);
+            DiagLog.add(stLine);
             accL = 0; accR = 0; accN = 0;
         }
     }
@@ -614,6 +644,11 @@ public final class AudioEngine {
     }
 
     /** 最近一帧的 RMS 电平（dBFS） */
+    /** 分析内核（响度 / BPM / 音高） */
+    public AudioAnalysis analysis() {
+        return analysis;
+    }
+
     public float lastRmsDb() {
         return lastRmsDb;
     }
@@ -650,6 +685,7 @@ public final class AudioEngine {
         level = 0f;
         bass = 0f;
         beatEnergy = 0f;
+        analysis.reset();
     }
 
     private void releaseRecord() {
