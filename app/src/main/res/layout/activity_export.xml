@@ -261,7 +261,7 @@
                         android:textSize="9.5sp" />
                 </LinearLayout>
 
-                <Switch
+                <Switch style="@style/AuroraSwitch"
                     android:id="@+id/swMute"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"

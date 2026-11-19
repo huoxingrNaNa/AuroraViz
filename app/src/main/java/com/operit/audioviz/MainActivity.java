@@ -2,6 +2,7 @@ package com.operit.audioviz;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.NotificationManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -20,6 +21,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
+import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.SeekBar;
@@ -33,7 +35,7 @@ import rikka.shizuku.Shizuku;
 
 /** 主界面：监听控制、六种模式、六套配色、界面风格与 Shizuku 一键授权 */
 public class MainActivity extends Activity {
-
+    private static final String TAG = "AuroraViz";
     private static final int REQ_OVERLAY = 0x11;
     private static final int REQ_MIC = 0x12;
     private static final int REQ_PROJECTION = 0x13;
@@ -49,8 +51,14 @@ public class MainActivity extends Activity {
     private TextView audioHint;
     private TextView mainHint;
     private TextView diag;
+    private Switch swLiveCard;
+    private TextView tvLiveMode;
+    private TextView tvNameStyle;
+    private Switch swHideVideo;
     private TextView analysisText;
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
+    /** 延迟做一次"上岛自检"，等监听服务重连/系统状态落定后再判断 */
+    private final Runnable liveCardCheck = this::checkLiveCardDiag;
     private GradientButton btnToggle;
     private GhostButton btnAuth;
     private GhostButton btnRecord;
@@ -131,8 +139,6 @@ public class MainActivity extends Activity {
             String anaLine = analysisLine();
             AudioAnalysis aa = AudioEngine.get().analysis();
             boolean hot = aa.clipWarn();
-            android.util.Log.i("AuroraViz", "ana " + anaLine
-                    + (hot ? "  CLIP!" : ""));
             diag.setText(txt);
             diag.setVisibility(View.VISIBLE);
             if (analysisText != null) {
@@ -204,6 +210,85 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        // 若通知使用权是"假连接"（重装后常见），主动请求系统重绑
+        try {
+            MediaWatcher.get().ensureConnected(this);
+        } catch (Throwable ignored) {
+        }
+        // targetSdk 36 起系统强制 edge-to-edge：窗口会延伸到系统栏下方，
+        // 底部 Tab 栏必须自己避让手势条，否则会被压住半截
+        View tabBar = findViewById(R.id.tabBar);
+        if (tabBar != null) {
+            final int padBottom = tabBar.getPaddingBottom();
+            tabBar.setOnApplyWindowInsetsListener((v, ins) -> {
+                int b = ins.getSystemWindowInsetBottom();
+                v.setPadding(v.getPaddingLeft(), v.getPaddingTop(), v.getPaddingRight(),
+                        padBottom + Math.max(b, 0));
+                return ins;
+            });
+            tabBar.requestApplyInsets();
+        }
+        // 状态栏实时卡片：总开关 + 胶囊内容模式
+        swLiveCard = findViewById(R.id.swLiveCard);
+        tvLiveMode = findViewById(R.id.tvLiveMode);
+        if (swLiveCard != null) {
+            swLiveCard.setChecked(Prefs.liveCard(this));
+            swLiveCard.setOnCheckedChangeListener((btn, checked) -> {
+                Prefs.setLiveCard(MainActivity.this, checked);
+                try {
+                    if (checked) {
+                        TextCard.get().start(MainActivity.this);
+                    } else {
+                        // 只让通知退出胶囊，不停止任何监听
+                        TextCard.get().refresh();
+                    }
+                } catch (Throwable ignored) {
+                }
+            });
+        }
+        if (tvLiveMode != null) {
+            tvLiveMode.setText(Prefs.liveModeName(Prefs.liveMode(this)));
+            tvLiveMode.setOnClickListener(v -> {
+                int next = (Prefs.liveMode(MainActivity.this) + 1) % 4;
+                Prefs.setLiveMode(MainActivity.this, next);
+                tvLiveMode.setText(Prefs.liveModeName(next));
+            });
+        }
+        tvNameStyle = findViewById(R.id.tvNameStyle);
+        if (tvNameStyle != null) {
+            tvNameStyle.setText(Prefs.nameStyleName(Prefs.nameFull(this)));
+            tvNameStyle.setOnClickListener(v -> {
+                boolean next = !Prefs.nameFull(MainActivity.this);
+                Prefs.setNameFull(MainActivity.this, next);
+                tvNameStyle.setText(Prefs.nameStyleName(next));
+                try {
+                    TextCard.get().refresh();   // 立即生效，不用等下一秒
+                } catch (Throwable ignored) {
+                }
+            });
+        }
+        swHideVideo = findViewById(R.id.swHideVideo);
+        if (swHideVideo != null) {
+            swHideVideo.setChecked(Prefs.hideOnVideo(this));
+            swHideVideo.setOnCheckedChangeListener((btn, checked) -> {
+                Prefs.setHideOnVideo(MainActivity.this, checked);
+                try {
+                    TextCard.get().refresh();
+                } catch (Throwable ignored) {
+                }
+            });
+        }
+        // 开关打开时，进入应用即开始显示实时卡片
+        if (Prefs.liveCard(this)) {
+            uiHandler.postDelayed(new Runnable() {
+                @Override public void run() {
+                    try {
+                        TextCard.get().start(MainActivity.this);
+                    } catch (Throwable ignored) {
+                    }
+                }
+            }, 2500);
+        }
 
         preview = findViewById(R.id.preview);
         preview.setModeLabelAnchor(1);  // 应用内：右上（LIVE 状态行下一行）
@@ -560,6 +645,18 @@ public class MainActivity extends Activity {
         updateShizukuUi();
         uiHandler.removeCallbacks(diagTick);
         uiHandler.post(diagTick);
+        // 卡片上的"关闭卡片"会改这个设置，回到界面时同步开关状态
+        if (swLiveCard != null) {
+            boolean on = Prefs.liveCard(this);
+            if (swLiveCard.isChecked() != on) {
+                swLiveCard.setChecked(on);
+            }
+        }
+        // 上岛受阻时给一句能照做的说明（提示区本来就空才写，不覆盖其他消息）
+        if (message.getVisibility() != View.VISIBLE) {
+            uiHandler.removeCallbacks(liveCardCheck);
+            uiHandler.postDelayed(liveCardCheck, 1500);
+        }
     }
 
     @Override
@@ -727,17 +824,33 @@ public class MainActivity extends Activity {
         seekSize.setThumbTintList(ColorStateList.valueOf(sc1));
         seekSens.setProgressTintList(tint);
         seekSens.setThumbTintList(ColorStateList.valueOf(sc1));
-        swOverlay.setThumbTintList(ColorStateList.valueOf(sc1));
-        swOverlay.setTrackTintList(ColorStateList.valueOf(withAlpha(sc2, 0.45f)));
-        swIdle.setThumbTintList(ColorStateList.valueOf(sc1));
-        swIdle.setTrackTintList(ColorStateList.valueOf(withAlpha(sc2, 0.45f)));
-        swDiag.setThumbTintList(ColorStateList.valueOf(sc1));
-        swDiag.setTrackTintList(ColorStateList.valueOf(withAlpha(sc2, 0.45f)));
-        swStereo.setThumbTintList(ColorStateList.valueOf(sc1));
-        swStereo.setTrackTintList(ColorStateList.valueOf(withAlpha(sc2, 0.45f)));
-
+        // 10 个开关统一按状态着色：选中=主题色，未选中=灰（避免"关闭和开启同色"）
+        ColorStateList thumbCl = stateTint(sc1, 0xFF6E7484);
+        ColorStateList trackCl = stateTint(withAlpha(sc2, 0.55f), 0xFF3C414E);
+        Switch[] sws = new Switch[]{swLiveCard, swHideVideo, swBare, swAutoSens,
+                swFreqAxis, swModeLabel, swOverlay, swIdle, swDiag, swStereo};
+        for (Switch swX : sws) {
+            if (swX != null) {
+                swX.setThumbTintList(thumbCl);
+                swX.setTrackTintList(trackCl);
+            }
+        }
         updateAudioHint();
         applyTitleGradient();
+    }
+
+    /**
+     * 开关的按状态着色：选中用主题色，未选中用灰。
+     * 之前这里传的是 ColorStateList.valueOf(单色)，导致关闭状态和开启状态同色。
+     */
+    private static ColorStateList stateTint(int on, int off) {
+        return new ColorStateList(
+                new int[][]{
+                        {android.R.attr.state_checked},
+                        {-android.R.attr.state_enabled},
+                        {}
+                },
+                new int[]{on, 0xFF2A2F3A, off});
     }
 
     private static int withAlpha(int color, float alpha) {
@@ -792,7 +905,7 @@ public class MainActivity extends Activity {
             statusShizuku.setText("SHIZUKU 就绪");
             statusShizuku.setTextColor(0xFF8CF7E4);
             btnAuth.setLabel("一键授权");
-            shizukuHint.setText("自动开启悬浮窗 / 录音 / 通知权限");
+            shizukuHint.setText("自动开启悬浮窗 / 录音 / 通知 / 通知使用权");
         }
         btnAuth.invalidate();
     }
@@ -975,14 +1088,70 @@ public class MainActivity extends Activity {
             String log = ShizukuHelper.grantAll(this);
             runOnUiThread(() -> {
                 boolean overlayOk = Settings.canDrawOverlays(this);
-                String tip = overlayOk ? "授权完成：悬浮窗、录音、通知已就绪"
-                        : "已执行授权命令，若悬浮窗仍不可用请手动开启";
+                String tip;
+                if (!overlayOk) {
+                    tip = "已执行授权命令，若悬浮窗仍不可用请手动开启";
+                } else if (log.contains("NLS_FAIL")) {
+                    tip = "悬浮窗 / 录音 / 通知已就绪，但通知使用权没开成 ——"
+                            + "请在系统设置 › 通知使用权 里手动勾选本应用";
+                } else {
+                    tip = "授权完成：悬浮窗、录音、通知、通知使用权已就绪";
+                }
                 if (log.contains("ERR")) tip += "（部分命令失败：" + log.replace('\n', ' ') + ")";
+                Log.i(TAG, "grant " + log.replace('\n', ' '));
                 showMessage(tip);
                 updateShizukuUi();
                 updateUi();
+                // 监听服务重新绑定需要几秒，延迟回查真实状态再说"是否就绪"
+                uiHandler.removeCallbacks(liveCardCheck);
+                uiHandler.postDelayed(liveCardCheck, 2500);
             });
         }, "shizuku-grant").start();
+    }
+
+    /**
+     * 上岛（流体云实时卡片）自检。
+     * 返回空串表示没有发现阻碍；否则返回一句能直接照做的说明。
+     * 注意：流体云总开关是系统侧设置，App 无法代开，只能检测并提示。
+     */
+    private String liveCardDiag() {
+        if (!Prefs.liveCard(this)) return "";
+        // 先看最硬的证据：监听服务真的连上了，就说明授权一定是通的
+        //（避免读到 Settings 的旧缓存，误报"未开启"）
+        if (!MediaWatcher.listenerConnected()) {
+            if (!ShizukuHelper.hasNotificationListener(this)) {
+                return "上岛自检：通知使用权未开启 ——点「一键授权」可自动开启";
+            }
+            if (OverlayService.isRunning()) {
+                return "上岛自检：通知使用权已开，但监听服务未连上 ——重启本应用或重新点「一键授权」";
+            }
+        }
+        if (Build.VERSION.SDK_INT >= 33
+                && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+            return "上岛自检：通知权限被拒 ——在系统设置里允许本应用发通知";
+        }
+        if (Build.VERSION.SDK_INT >= 36) {
+            try {
+                NotificationManager nm = getSystemService(NotificationManager.class);
+                if (nm != null && !nm.canPostPromotedNotifications()) {
+                    return "上岛自检：系统未允许提升通知 ——"
+                            + "请到系统设置 › 通知与状态栏 › 流体云/实时活动 打开总开关";
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+        return "";
+    }
+
+    /** 自检有阻碍时把原因写到提示区（同时留一行日志备查） */
+    private void checkLiveCardDiag() {
+        if (message.getVisibility() == View.VISIBLE) return;
+        String diag = liveCardDiag();
+        if (!diag.isEmpty()) {
+            Log.i(TAG, "livecard " + diag);
+            showMessage(diag);
+        }
     }
 
     // ------------------------------------------------------------ 监听控制

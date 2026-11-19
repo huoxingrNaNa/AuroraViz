@@ -30,6 +30,14 @@ public final class Prefs {
     private static final String K_BARE = "overlay_bare";
     private static final String K_POSX = "overlay_x";
     private static final String K_POSY = "overlay_y";
+    /** 状态栏实时卡片（岛）总开关 */
+    private static final String K_LIVE_CARD = "live_card";
+    /** 状态栏胶囊显示内容的模式 0=BPM 1=音名 2=dB 3=歌名 */
+    private static final String K_LIVE_MODE = "live_mode";
+    /** 胶囊里的歌名：false=简略（中间省略） true=详细（完整，由系统截尾） */
+    private static final String K_NAME_FULL = "live_name_full";
+    /** 刷视频（抖音/快手/B站等）时是否自动隐藏实时卡片 */
+    private static final String K_HIDE_VIDEO = "live_hide_video";
 
     public static final int SOURCE_MIC = 0;
     public static final int SOURCE_SYSTEM = 1;
@@ -280,5 +288,56 @@ public final class Prefs {
         return idx <= 0 ? 0 : idx == 1 ? 30 : idx == 2 ? 60 : 120;
     }
 
+    /** 状态栏实时卡片总开关（默认开） */
+    public static boolean liveCard(Context c) {
+        return sp(c).getBoolean(K_LIVE_CARD, true);
+    }
 
+    public static void setLiveCard(Context c, boolean v) {
+        sp(c).edit().putBoolean(K_LIVE_CARD, v).apply();
+    }
+
+    /** 胶囊内容模式：0=BPM 1=音名 2=dB 3=歌名 */
+    public static int liveMode(Context c) {
+        return sp(c).getInt(K_LIVE_MODE, 0);
+    }
+
+    public static void setLiveMode(Context c, int v) {
+        sp(c).edit().putInt(K_LIVE_MODE, v).apply();
+    }
+
+    /** 胶囊歌名是否用完整形式（true=详细，false=简略中间省略） */
+    public static boolean nameFull(Context c) {
+        return sp(c).getBoolean(K_NAME_FULL, false);
+    }
+
+    public static void setNameFull(Context c, boolean v) {
+        sp(c).edit().putBoolean(K_NAME_FULL, v).apply();
+    }
+
+    public static String nameStyleName(boolean full) {
+        return full ? "详细" : "简略";
+    }
+
+    /** 刷视频时是否自动隐藏实时卡片（默认开） */
+    public static boolean hideOnVideo(Context c) {
+        return sp(c).getBoolean(K_HIDE_VIDEO, true);
+    }
+
+    public static void setHideOnVideo(Context c, boolean v) {
+        sp(c).edit().putBoolean(K_HIDE_VIDEO, v).apply();
+    }
+
+    public static String liveModeName(int idx) {
+        switch (idx) {
+            case 1:
+                return "音名";
+            case 2:
+                return "电平";
+            case 3:
+                return "歌名";
+            default:
+                return "BPM";
+        }
+    }
 }

@@ -32,6 +32,8 @@ public class OverlayService extends Service {
 
     public static final String ACTION_START = "com.operit.audioviz.action.START";
     public static final String ACTION_STOP = "com.operit.audioviz.action.STOP";
+    /** 只关闭状态栏卡片，不影响监听 */
+    public static final String ACTION_HIDE_CARD = "com.operit.audioviz.action.HIDE_CARD";
     public static final String ACTION_STATE = "com.operit.audioviz.action.STATE";
     public static final String ACTION_ERROR = "com.operit.audioviz.action.ERROR";
     public static final String ACTION_APPLY = "com.operit.audioviz.action.APPLY";
@@ -90,6 +92,14 @@ public class OverlayService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        if (intent != null && ACTION_HIDE_CARD.equals(intent.getAction())) {
+            // 只关掉状态栏卡片，监听继续跑
+            Prefs.setLiveCard(this, false);
+            TextCard.get().stop();
+            broadcastState();
+            return START_NOT_STICKY;
+        }
+
         if (intent != null && ACTION_STOP.equals(intent.getAction())) {
             shutdown();
             return START_NOT_STICKY;
@@ -163,6 +173,7 @@ public class OverlayService extends Service {
         if (wantOverlay) {
             showOverlay();
         }
+        TextCard.get().start(this);
         running = true;
         broadcastState();
         return START_NOT_STICKY;
@@ -332,9 +343,9 @@ public class OverlayService extends Service {
     private void startForegroundCompat(int source) {
         NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         if (nm != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel ch = new NotificationChannel(CHANNEL_ID, "音频可视化",
-                    NotificationManager.IMPORTANCE_LOW);
-            ch.setDescription("悬浮窗可视化运行时显示的常驻通知");
+            NotificationChannel ch = new NotificationChannel("aurora_fg_card", "实时分析卡片",
+                    NotificationManager.IMPORTANCE_DEFAULT);
+            ch.setDescription("把播放信息以实时活动形式显示");
             ch.setShowBadge(false);
             nm.createNotificationChannel(ch);
         }
@@ -351,13 +362,17 @@ public class OverlayService extends Service {
         String title = source == Prefs.SOURCE_SYSTEM ? "正在监听系统音频" : "正在监听麦克风";
 
         Notification.Builder b = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
-                ? new Notification.Builder(this, CHANNEL_ID)
+                ? new Notification.Builder(this, "aurora_fg_card")
                 : new Notification.Builder(this);
         b.setContentTitle(title)
                 .setContentText("监听中，点击进入应用设置")
-                .setSmallIcon(R.drawable.ic_launcher)
+                // 单色状态栏图标（彩色自适应图标在通知栏里会显示成一块渐变方块）
+                .setSmallIcon(R.drawable.ic_stat_viz)
                 .setOngoing(true)
                 .setContentIntent(pi)
+                // 注意：这里不设 setColorized(true)/setColor —— ColorOS 会把 color
+                // 直接当成整条通知的背景色，导致通知栏发蓝
+                .setStyle(new Notification.BigTextStyle().bigText("监听中，点击进入应用设置"))
                 .addAction(new Notification.Action.Builder(null, "停止", stopPi).build());
 
         Notification n = b.build();
@@ -584,6 +599,7 @@ public class OverlayService extends Service {
             overlayView = null;
         }
         viz = null;
+        TextCard.get().stop();
         running = false;
         broadcastState();
         stopForeground(true);
@@ -601,6 +617,7 @@ public class OverlayService extends Service {
             }
             overlayView = null;
         }
+        TextCard.get().stop();
         running = false;
         super.onDestroy();
     }

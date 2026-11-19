@@ -3,9 +3,15 @@
     <style name="AppTheme" parent="@android:style/Theme.Material.NoActionBar">
         <item name="android:windowBackground">@drawable/bg_window</item>
         <item name="android:statusBarColor">#00000000</item>
-        <item name="android:navigationBarColor">#00000000</item>
+<item name="android:navigationBarColor">#00000000</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:colorAccent">#FF7B5CFF</item>
         <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+    </style>
+
+    <!-- 系统原生 Switch 外观，仅把默认紫色 accent 换成蓝色 tint -->
+    <style name="AuroraSwitch" parent="@android:style/Widget.Material.CompoundButton.Switch">
+        <item name="android:thumbTint">@color/sw_thumb_tint</item>
+        <item name="android:trackTint">@color/sw_track_tint</item>
     </style>
 </resources>

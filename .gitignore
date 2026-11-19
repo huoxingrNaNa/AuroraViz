@@ -10,3 +10,6 @@ captures/
 *.log
 *.apk
 !docs/*.png
+# 签名密钥与本地凭据，绝不提交
+*.jks
+*.keystore

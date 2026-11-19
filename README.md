@@ -2,7 +2,7 @@
 
 Android 音频可视化应用：**悬浮窗 + 应用内双通道显示**，纯 Java 原生 Canvas 绘制，无第三方图形库。
 
-> 版本：v8.6 (versionCode 81) · minSdk 26 / targetSdk 34 · 单 APK 约 158 KB
+> 版本：v8.8 (versionCode 158) · minSdk 26 / targetSdk 36 · 单 APK 约 141 KB
 
 <img src="docs/screenshot.jpg" width="340" alt="截图">
 
@@ -100,7 +100,18 @@ adb shell pm install -r /data/local/tmp/av.apk
 | `WAKE_LOCK` | 息屏时保持采集 |
 | `moe.shizuku.manager.permission.API_V23` | Shizuku 一键授权（可选） |
 
-「一键授权（Shizuku）」会执行：`appops set ... SYSTEM_ALERT_WINDOW allow` 与 `pm grant` 录音/通知权限。
+「一键授权（Shizuku）」会执行：
+
+```sh
+appops set <pkg> SYSTEM_ALERT_WINDOW allow
+pm grant <pkg> android.permission.RECORD_AUDIO
+pm grant <pkg> android.permission.POST_NOTIFICATIONS
+# 通知使用权（上岛依赖）：先解绑再绑定，顺带修掉"设置里已授权但服务没连上"的僵尸绑定
+cmd notification disallow_listener <pkg>/<pkg>.MediaWatcherService
+cmd notification allow_listener    <pkg>/<pkg>.MediaWatcherService
+```
+
+授权后 App 会回查系统设置确认结果；失败时提示区会说明该去哪里手动开。
 
 ---
 
@@ -121,12 +132,70 @@ adb shell pm install -r /data/local/tmp/av.apk
 
 ---
 
+## 系统与兼容性
+
+| 项 | 要求 |
+|---|---|
+| 最低系统 | Android 8.0（API 26） |
+| 编译 / 目标 | compileSdk 36 · targetSdk 36 |
+| 状态栏实时卡片（「上岛」） | **Android 16（API 36）及以上，且厂商实现了实时通知** |
+| 实测环境 | 一加 PLQ110 · ColorOS V16.0.0（Android 16 / SDK 36） |
+
+### 「上岛」到底是什么条件
+
+App 只是发起请求，是否显示成胶囊/卡片由系统决定。代码侧满足的条件：
+
+- 声明并持有 `POST_PROMOTED_NOTIFICATIONS`（targetSdk 36 时普通权限，安装即有）
+- 常驻通知带 `extras.putBoolean("android.requestPromotedOngoing", true)`
+- `setOngoing(true)` + `setOnlyAlertOnce(true)` + `setShowWhen(false)`
+- 只允许的样式（本项目用 `BigTextStyle`），且**不能** `setColorized(true)`
+- 胶囊上的短文本用 `setShortCriticalText()`，实际只显示 7 个字符以内
+
+系统侧还必须开着「流体云 / 实时活动」总开关（ColorOS：设置 › 通知与状态栏）。**这是用户级开关，App 无权也无法代开**，只能在检测到未开时提示。
+
+### 已测 / 未测
+
+| 环境 | 表现 |
+|---|---|
+| ColorOS 16（Android 16，一加 PLQ110） | ✅ 已实测上岛：胶囊 + 展开卡片均正常，`PROMOTED_ONGOING` 标志稳定 |
+| 其他厂商 Android 16（HyperOS / OriginOS / MagicOS / One UI 等） | ⚠️ **未实测**。只要厂商遵循同一套 API，理论上同样生效 |
+| Android 15 及以下 | ❌ 无该 API。「状态栏实时卡片」开关不起作用，通知仍照常留在通知栏，前台服务与悬浮窗不受影响 |
+| 系统关闭流体云总开关 | ❌ 上岛失败，App 在提示区给出具体原因 |
+
+> 一点经验：通知使用权"设置里显示已授权"不等监听服务真的连上。这类僵尸绑定要用 `cmd notification disallow_listener` + `allow_listener` 解绑重绑才能恢复。
+
+---
+
+## 待实测清单
+
+以下项目**尚未在真机上验证过**，都属"能用但没测全"，欢迎反馈：
+
+| 分类 | 待测项 |
+|---|---|
+| 上岛 | 非 ColorOS 的 Android 16 机型（HyperOS / OriginOS / MagicOS / One UI）是否上岛；各厂商对 `setShortCriticalText` 的截断规则 |
+| 上岛 | 总开关从关到开的过程中，自检提示能否正确消失 |
+| 场景 | 分屏 / 小窗 / 游戏空间下卡片是否继续显示；息屏后是否仍在更新 |
+| 场景 | 蓝牙耳机切换、来电打断、多个播放器抢音频焦点时的卡片与读数表现 |
+| 场景 | 应用分身（多用户）下的隐藏判定：目前只在 B 站分身上验证过，其他 App 分身未测 |
+| 稳定性 | 连续数小时监听的内存与耗电；被系统回收后前台服务与通知能否自动恢复 |
+| 采集 | 「禁止被录音」应用的完整清单：目前只确认国内主流音乐 App 全部拒绝 |
+| 授权 | Shizuku 服务重启／授权被撤销后，一键授权与自检提示能否正确引导 |
+| 导出 | 各分辨率 / 帧率组合的音视频同步；超长音频（> 30 min）导出稳定性 |
+| 兼容 | Android 8–15 上各界面与权限流程（尤其 13 以下的 `POST_NOTIFICATIONS` 缺失场景） |
+
+---
+
 ## 代码结构
 
 ```
 app/src/main/java/com/operit/audioviz/
 ├── MainActivity.java        设置界面：模式/配色/调色器/灵敏度/尺寸/开关
 ├── OverlayService.java      前台服务：悬浮窗 + AudioEngine 生命周期
+├── MediaWatcher.java        读当前播放器（媒体会话 / 分身通知 / Shizuku 读前台应用）
+├── MediaWatcherService.java NotificationListenerService：通知使用权入口，驱动 MediaWatcher
+├── TextCard.java            状态栏实时卡片（Android 16 promoted ongoing notification）
+├── ShizukuHelper.java       Shizuku 一键授权（悬浮窗 / 录音 / 通知 / 通知使用权）
+├── AudioAnalysis.java       响度 / 峰值 / BPM / 音高 / 削波判定
 ├── AudioEngine.java         录音、FFT、频带/波形输出（单例）
 ├── VisualizerView.java      全部绘制：6 种模式 + 纵轴 + 峰值弹道 + 待机动画
 ├── Prefs.java               偏好读写
@@ -212,6 +281,8 @@ paint.setShader(gradient);           // 渐变亮度被乘上 7.8% → 看起来
 | 8.4 | 标签位置按宿主分开：应用内在右上（状态行下一行）、浮窗在顶部居中 |
 | 8.5 | 修复关闭频率标注后浮窗标签落回右下、压住柱身与下层文字 |
 | 8.6 | 新增响度表（RMS / 峰值 / 短时 LUFS）、节拍 BPM（带半速/倍速备选值）、音高音名与音分；修复 BPM 倍频误判、音高乱跳与边界伪峰、削波误报、停播后读数残留；诊断日志改为常开并支持一键导出分享 |
+| 8.7 | 状态栏实时卡片接入 Android 16 的 promoted ongoing notification（ColorOS 流体云上岛）；刷视频自动隐藏改为三路判定（媒体会话 / 分身通知 / Shizuku 读前台应用）+ 15 秒宽限 + 即时撤卡，修掉分身场景下"空会话分支直接 return"导致判定全失效的根因；开关恢复系统原生外观并按状态着色（修 10 个开关关闭态不变色）；清理全部调试残留；修 `MediaWatcher.detach()` 静态单例泄漏；削波判定收紧到真实满刻度（连续 32 采样）；换用独立发布密钥签名 |
+| 8.8 | Shizuku 一键授权新增「通知使用权」（先解绑再重绑，顺带修僵尸绑定），执行后回查系统设置确认结果，并让 `shell()` 捕获 stderr 以免失败被静默吞掉；新增上岛自检：通知使用权 / 监听是否真连上 / 通知权限 / `canPostPromotedNotifications()` 四项，只在有阻碍时提示原因（修掉读到设置旧缓存导致"授权成功却说没开"的误报） |
 
 ---
 

@@ -151,9 +151,11 @@ public final class AudioAnalysis {
             sum += s * s;
             float a = s < 0 ? -s : s;
             if (a > mx) mx = a;
-            // 真正的平顶削波：连续 >=3 个满刻度采样
-            if (a >= 0.999f) {
-                if (++run >= 3) clipAt = now;
+            // 严格满刻度：只有采样值恰为 32767 / -32768 才算（a >= 32767/32768 ≈ 0.999969）。
+            // 连续 32 个（44.1kHz 下约 0.7ms）这样的采样才判为平顶削波，
+            // 避免把"母带压得很响但没削"的曲目全标红。
+            if (a >= 0.99996f) {
+                if (++run >= 32) clipAt = now;
             } else {
                 run = 0;
             }
@@ -179,7 +181,7 @@ public final class AudioAnalysis {
             }
         }
         lufs = (float) (-0.691 + 10.0 * Math.log10(msSmooth + 1e-10));
-        clipWarn = now - clipAt < 1500L;
+        clipWarn = now - clipAt < 1000L;
         // 持续静音 1.5s 后清空瞬时读数，否则停歌后 BPM 和音高会一直挂在界面上
         if (ms < SILENT_MS) {
             if (quietAt == 0L) quietAt = now;

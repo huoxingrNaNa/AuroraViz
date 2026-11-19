@@ -1,24 +1,44 @@
 plugins { id 'com.android.application' }
 
+// 发布签名凭据放在 local.properties（已被 .gitignore 排除）。
+// 若该文件里没有 AURORA_STORE_FILE（别人克隆仓库的情况），release 自动回退到 debug 签名。
+def signingProps = new Properties()
+def spFile = rootProject.file('local.properties')
+if (spFile.exists()) {
+    spFile.withInputStream { signingProps.load(it) }
+}
+def hasReleaseKey = signingProps.getProperty('AURORA_STORE_FILE') != null
+
 android {
     namespace 'com.operit.audioviz'
-    compileSdk 34
+    compileSdk 36
 
     defaultConfig {
         applicationId "com.operit.audioviz"
         minSdk 26
-        targetSdk 34
-        versionCode 81
-        versionName "8.6"
+        targetSdk 36
+        versionCode 158
+        versionName "8.8"
     }
 
+    signingConfigs {
+        release {
+            if (hasReleaseKey) {
+                storeFile rootProject.file(signingProps.getProperty('AURORA_STORE_FILE'))
+                storePassword signingProps.getProperty('AURORA_STORE_PASSWORD')
+                keyAlias signingProps.getProperty('AURORA_KEY_ALIAS')
+                keyPassword signingProps.getProperty('AURORA_KEY_PASSWORD')
+            }
+        }
+    }
     buildTypes {
         debug {
             minifyEnabled false
         }
         release {
             minifyEnabled false
-            signingConfig signingConfigs.debug
+            // 有自建密钥就用它；没有则回退 debug，保证仓库克隆下来仍能构建
+            signingConfig hasReleaseKey ? signingConfigs.release : signingConfigs.debug
         }
     }
 
@@ -27,7 +47,11 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
 
-    lint { abortOnError false }
+    lint {
+        abortOnError false
+        // 本机无法访问 dl.google.com，release 的 lintVital 会因下载依赖失败而中断构建
+        checkReleaseBuilds false
+    }
 }
 
 dependencies {

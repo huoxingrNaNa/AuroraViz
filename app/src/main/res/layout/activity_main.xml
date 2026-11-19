@@ -287,7 +287,7 @@
                     android:textSize="11sp" />
             </LinearLayout>
 
-            <Switch
+            <Switch style="@style/AuroraSwitch"
                 android:id="@+id/swStereo"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -467,8 +467,143 @@
                         android:textSize="9.5sp" />
                 </LinearLayout>
 
-                <Switch
+                <Switch style="@style/AuroraSwitch"
                     android:id="@+id/swOverlay"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:showText="false" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="状态栏实时卡片"
+                        android:textColor="#FFF2F5FF"
+                        android:textSize="12.5sp"
+                        android:textStyle="bold" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:tag="hint"
+                        android:text="在状态栏/流体云显示歌名与分析数据"
+                        android:textColor="#FF6F7896"
+                        android:textSize="9.5sp" />
+                </LinearLayout>
+                <Switch style="@style/AuroraSwitch"
+                    android:id="@+id/swLiveCard"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:showText="false" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="胶囊显示内容"
+                    android:textColor="#FFF2F5FF"
+                    android:textSize="12.5sp"
+                    android:textStyle="bold" />
+                <TextView
+                    android:id="@+id/tvLiveMode"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_pill"
+                    android:paddingLeft="12dp"
+                    android:paddingTop="5dp"
+                    android:paddingRight="12dp"
+                    android:paddingBottom="5dp"
+                    android:text="BPM"
+                    android:textColor="#FF4FD1FF"
+                    android:textSize="11.5sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="胶囊歌名"
+                        android:textColor="#FFF2F5FF"
+                        android:textSize="12.5sp"
+                        android:textStyle="bold" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:tag="hint"
+                        android:text="简略=省略中间，详细=完整名（展开卡始终显示完整）"
+                        android:textColor="#FF6F7896"
+                        android:textSize="9.5sp" />
+                </LinearLayout>
+                <TextView
+                    android:id="@+id/tvNameStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_pill"
+                    android:paddingLeft="12dp"
+                    android:paddingTop="5dp"
+                    android:paddingRight="12dp"
+                    android:paddingBottom="5dp"
+                    android:text="简略"
+                    android:textColor="#FF4FD1FF"
+                    android:textSize="11.5sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="刷视频时隐藏卡片"
+                        android:textColor="#FFF2F5FF"
+                        android:textSize="12.5sp"
+                        android:textStyle="bold" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:tag="hint"
+                        android:text="抖音/快手/B站等视频应用播放时自动撤掉实时卡片"
+                        android:textColor="#FF6F7896"
+                        android:textSize="9.5sp" />
+                </LinearLayout>
+                <Switch style="@style/AuroraSwitch"
+                    android:id="@+id/swHideVideo"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:showText="false" />
@@ -511,7 +646,7 @@
                         android:textSize="9.5sp" />
                 </LinearLayout>
 
-        <Switch
+        <Switch style="@style/AuroraSwitch"
                     android:id="@+id/swIdle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -546,7 +681,7 @@
                         android:textColor="#FF6F7896"
                         android:textSize="9.5sp" />
                 </LinearLayout>
-                <Switch
+                <Switch style="@style/AuroraSwitch"
                     android:id="@+id/swDiag"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -575,7 +710,7 @@
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
 
-                <Switch
+                <Switch style="@style/AuroraSwitch"
                     android:id="@+id/swStereoLog"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -763,7 +898,7 @@
                         android:textSize="9.5sp" />
                 </LinearLayout>
 
-                <Switch
+                <Switch style="@style/AuroraSwitch"
                     android:id="@+id/swAutoSens"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -801,7 +936,7 @@
                         android:textSize="9.5sp" />
                 </LinearLayout>
 
-                <Switch
+                <Switch style="@style/AuroraSwitch"
                     android:id="@+id/swFreqAxis"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -839,7 +974,7 @@
                         android:textSize="9.5sp" />
                 </LinearLayout>
 
-                <Switch
+                <Switch style="@style/AuroraSwitch"
                     android:id="@+id/swModeLabel"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -942,7 +1077,7 @@
                         android:textSize="9.5sp" />
                 </LinearLayout>
 
-                <Switch
+                <Switch style="@style/AuroraSwitch"
                     android:id="@+id/swBare"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -1195,6 +1330,7 @@
         android:background="@drawable/divider" />
 
     <LinearLayout
+        android:id="@+id/tabBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
