@@ -1,0 +1,95 @@
+name: 兼容性反馈
+description: 上报「上岛」/实时卡片在非实测机型上的表现，或 Android 8–15 的兼容问题
+title: "[兼容性] 机型 · ROM · 是否上岛"
+labels: ["compatibility"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。本项目的「上岛」（状态栏实时卡片）**只在 一加 PLQ110 / ColorOS V16.0.0 / Android 16 上实测过**，
+        其余机型都靠大家上报。请把下面几项填完整，一次就能定位，不用来回问。
+  - type: input
+    id: device
+    attributes:
+      label: 机型
+      description: 厂商 + 型号，例如 一加 PLQ110 / 小米 15 / iQOO 13
+      placeholder: 一加 PLQ110
+    validations:
+      required: true
+  - type: input
+    id: rom
+    attributes:
+      label: 系统 ROM 版本
+      description: 设置 › 关于手机 里的版本号，ColorOS 形如 V16.0.0，HyperOS 形如 3.0.2.0
+      placeholder: ColorOS V16.0.0 / PLQ110_16.0.3.506(CN01)
+    validations:
+      required: true
+  - type: input
+    id: android
+    attributes:
+      label: Android 版本 / API
+      description: 例如 16（API 36）。低于 Android 16 没有实时卡片 API，不用排查上岛
+      placeholder: 16（API 36）
+    validations:
+      required: true
+  - type: dropdown
+    id: on_island
+    attributes:
+      label: 是否上岛（状态栏胶囊 / 实时活动是否出现）
+      options:
+        - 能上岛，正常显示
+        - 偶尔出现
+        - 完全不出现
+        - 出现了但内容不对
+    validations:
+      required: true
+  - type: dropdown
+    id: master_switch
+    attributes:
+      label: 系统「流体云 / 实时活动」总开关是否已打开
+      description: ColorOS 在 设置 › 通知与状态栏；其他厂商名称可能不同。这是用户级开关，App 无法代开
+      options:
+        - 已打开
+        - 已关闭
+        - 没找到这个开关
+        - 不确定
+    validations:
+      required: true
+  - type: textarea
+    id: app_hint
+    attributes:
+      label: App 提示区原文
+      description: 打开 App 主界面，提示区若有一行「上岛自检：…」，请原样抄过来（没有就写「无」）
+      render: text
+      placeholder: 上岛自检：系统未允许提升通知 ——请到系统设置 › 通知与状态栏 › 流体云/实时活动 打开总开关
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤与现象
+      description: 什么时候不出现／什么时候出现，越具体越好（例如「B 站分身刷视频时仍有卡片」）
+      render: text
+      placeholder: |
+        1. 打开 xxx 播放音乐
+        2. 打开 App，开启「状态栏实时卡片」
+        3. 现象：……
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Aurora Viz 版本
+      description: 设置 › 关于 里的版本号与 versionCode
+      placeholder: v8.8 (versionCode 158)
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 已确认
+      options:
+        - label: 已授予「通知使用权」（App 内点过「一键授权」，或系统设置里手动勾选）
+          required: true
+        - label: 通知栏里能看到 Aurora Viz 的常驻通知
+          required: true
