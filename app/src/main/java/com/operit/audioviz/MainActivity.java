@@ -2,6 +2,7 @@ package com.operit.audioviz;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.NotificationManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -53,6 +54,7 @@ public class MainActivity extends Activity {
     private TextView diag;
     private Switch swLiveCard;
     private TextView tvLiveMode;
+    private TextView tvLiveHint;
     private TextView tvNameStyle;
     private Switch swHideVideo;
     private TextView analysisText;
@@ -231,6 +233,8 @@ public class MainActivity extends Activity {
         // 状态栏实时卡片：总开关 + 胶囊内容模式
         swLiveCard = findViewById(R.id.swLiveCard);
         tvLiveMode = findViewById(R.id.tvLiveMode);
+        tvLiveHint = findViewById(R.id.tvLiveHint);
+        updateLiveHint();
         if (swLiveCard != null) {
             swLiveCard.setChecked(Prefs.liveCard(this));
             swLiveCard.setOnCheckedChangeListener((btn, checked) -> {
@@ -238,6 +242,11 @@ public class MainActivity extends Activity {
                 try {
                     if (checked) {
                         TextCard.get().start(MainActivity.this);
+                        // 第一次打开时讲清楚"卡片"和"上岛"的区别，之后靠常驻小字
+                        if (!Prefs.liveTipShown(MainActivity.this)) {
+                            Prefs.setLiveTipShown(MainActivity.this, true);
+                            showLiveTip();
+                        }
                     } else {
                         // 只让通知退出胶囊，不停止任何监听
                         TextCard.get().refresh();
@@ -391,9 +400,13 @@ public class MainActivity extends Activity {
                 for (int k = 0; k < hzChips.length; k++) hzChips[k].setChecked(k == hi);
                 Prefs.setVizHz(this, hi);
                 preview.setRenderHz(Prefs.vizHzValue(hi));
+                // 档位不只是限自己的重绘节奏，还要向系统申请窗口刷新率，
+                // 否则在把普通应用按 60Hz 喂的 ROM 上，"自动/120"都还是 60
+                Refresh.apply(this);
             });
         }
         preview.setRenderHz(Prefs.vizHzValue(hzSel));
+        Refresh.apply(this);
 
         styleIdx = Prefs.style(this);
         paletteIdx = Prefs.palette(this);
@@ -1110,10 +1123,62 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * 上岛（流体云实时卡片）自检。
-     * 返回空串表示没有发现阻碍；否则返回一句能直接照做的说明。
-     * 注意：流体云总开关是系统侧设置，App 无法代开，只能检测并提示。
+     * 「上岛」（状态栏胶囊 / 实况窗）对系统的要求，和「卡片」（常驻通知）不是一回事：
+     * 卡片任何系统都能显示；上岛需要 Android 16+ 且厂商实现了实时通知。
+     * 这里给出本机的实际情况，避免用户在旧系统上开了开关以为坏了。
      */
+    private String liveHintText() {
+        int sdk = Build.VERSION.SDK_INT;
+        if (sdk < 36) {
+            return "本机 Android " + sdk + "。状态栏胶囊 / 实况窗通常需要 Android 16 及以上、"
+                    + "且厂商实现了实时通知；本开关仍会显示常驻通知卡片（歌名 + 实时数据）。"
+                    + "部分国产 ROM 自带实况窗可能可用，以实际显示为准。";
+        }
+        boolean can = true;
+        try {
+            NotificationManager nm = getSystemService(NotificationManager.class);
+            can = nm == null || nm.canPostPromotedNotifications();
+        } catch (Throwable ignored) {
+        }
+        if (!can) {
+            return "系统未允许提升通知：到 设置 › 通知与状态栏 › 流体云 / 实时活动 打开总开关；"
+                    + "若找不到该开关，说明本机未实现实时通知。";
+        }
+        return "";
+    }
+
+    private void updateLiveHint() {
+        if (tvLiveHint == null) return;
+        String s = liveHintText();
+        if (s == null || s.isEmpty()) {
+            tvLiveHint.setVisibility(View.GONE);
+        } else {
+            tvLiveHint.setText(s);
+            tvLiveHint.setVisibility(View.VISIBLE);
+        }
+    }
+
+    /** 首次打开「状态栏实时卡片」时的一次性说明 */
+    private void showLiveTip() {
+        String extra = liveHintText();
+        String msg = "「卡片」和「上岛」是两件事：\n\n"
+                + "• 常驻通知卡片：任何系统都能显示歌名与实时数据。\n"
+                + "• 上岛（状态栏胶囊 / 实况窗）：需要 Android 16 及以上，"
+                + "且厂商实现了实时通知，同时系统侧总开关要打开。\n\n"
+                + (extra.isEmpty()
+                ? "本机已满足上岛条件；若状态栏没出现胶囊，点「一键授权」或检查系统总开关。"
+                : extra);
+        try {
+            new AlertDialog.Builder(this)
+                    .setTitle("关于「上岛」")
+                    .setMessage(msg)
+                    .setPositiveButton("知道了", null)
+                    .show();
+        } catch (Throwable t) {
+            Log.i(TAG, "live tip fail " + t);
+        }
+    }
+
     private String liveCardDiag() {
         if (!Prefs.liveCard(this)) return "";
         // 先看最硬的证据：监听服务真的连上了，就说明授权一定是通的

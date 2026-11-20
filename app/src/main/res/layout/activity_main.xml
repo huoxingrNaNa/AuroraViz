@@ -506,6 +506,15 @@
                     android:layout_height="wrap_content"
                     android:showText="false" />
             </LinearLayout>
+            <TextView
+                android:id="@+id/tvLiveHint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="5dp"
+                android:lineSpacingExtra="2dp"
+                android:textColor="#FF6F7896"
+                android:textSize="9.5sp"
+                android:visibility="gone" />
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

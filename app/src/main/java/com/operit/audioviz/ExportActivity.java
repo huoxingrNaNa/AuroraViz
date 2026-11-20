@@ -105,6 +105,7 @@ public class ExportActivity extends Activity {
         smIdx = Prefs.vizSmooth(this);
         preview.setSmoothTau(Prefs.smoothTauOf(smIdx));
         preview.setRenderHz(Prefs.vizHzValue(Prefs.vizHz(this)));
+        Refresh.apply(this);
         resIdx = Prefs.recRes(this);
         fpsIdx = Prefs.recFps(this);
         brIdx = Prefs.recBr(this);

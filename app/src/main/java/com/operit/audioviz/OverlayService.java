@@ -137,6 +137,14 @@ public class OverlayService extends Service {
         viz.setRenderHz(Prefs.vizHzValue(Prefs.vizHz(this)));
                     viz.setSmoothTau(Prefs.vizSmoothTau(this));
                     viz.setRenderHz(Prefs.vizHzValue(Prefs.vizHz(this)));
+                    // 设置变更时同步向系统申请刷新率
+                    if (params != null && overlayView != null) {
+                        Refresh.apply(params, this);
+                        try {
+                            wm.updateViewLayout(overlayView, params);
+                        } catch (Throwable ignored) {
+                        }
+                    }
                 }
             } else {
                 hideOverlay();
@@ -452,6 +460,9 @@ public class OverlayService extends Service {
         }
 
         overlayView.setOnTouchListener(this::onOverlayTouch);
+
+        // 向系统申请悬浮窗刷新率（否则高刷屏上多半只给 60Hz）
+        Refresh.apply(params, this);
 
         try {
             wm.addView(overlayView, params);

@@ -38,6 +38,8 @@ public final class Prefs {
     private static final String K_NAME_FULL = "live_name_full";
     /** 刷视频（抖音/快手/B站等）时是否自动隐藏实时卡片 */
     private static final String K_HIDE_VIDEO = "live_hide_video";
+    /** 是否已经讲过"上岛需要什么条件"（只弹一次） */
+    private static final String K_LIVE_TIP = "live_tip_shown";
 
     public static final int SOURCE_MIC = 0;
     public static final int SOURCE_SYSTEM = 1;
@@ -295,6 +297,15 @@ public final class Prefs {
 
     public static void setLiveCard(Context c, boolean v) {
         sp(c).edit().putBoolean(K_LIVE_CARD, v).apply();
+    }
+
+    /** 是否已经讲过"上岛需要什么条件"（只讲一次，避免每次打开都弹） */
+    public static boolean liveTipShown(Context c) {
+        return sp(c).getBoolean(K_LIVE_TIP, false);
+    }
+
+    public static void setLiveTipShown(Context c, boolean v) {
+        sp(c).edit().putBoolean(K_LIVE_TIP, v).apply();
     }
 
     /** 胶囊内容模式：0=BPM 1=音名 2=dB 3=歌名 */
