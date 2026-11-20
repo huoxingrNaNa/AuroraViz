@@ -162,7 +162,7 @@ App 只是发起请求，是否显示成胶囊/卡片由系统决定。代码侧
 | Android 15 及以下 | ❌ 无该 API。「状态栏实时卡片」开关不起作用，通知仍照常留在通知栏，前台服务与悬浮窗不受影响 |
 | 系统关闭流体云总开关 | ❌ 上岛失败，App 在提示区给出具体原因 |
 
-> 一点经验：通知使用权"设置里显示已授权"不等监听服务真的连上。这类僵尸绑定要用 `cmd notification disallow_listener` + `allow_listener` 解绑重绑才能恢复。
+> 一点经验：通知使用权"设置里显示已授权"不等监听服务真的连上。这类僵尸绑定要用 `cmd notification disallow_listener` + `allow_listener` 解绑重绑才能恢复。App 内已做了自动处理：软重绑（`requestRebind`）失败一次后，若有 Shizuku 就自动升级为强制解绑重绑，实测约 9 秒恢复。
 
 ---
 
@@ -228,6 +228,24 @@ paint.setShader(gradient);           // 渐变亮度被乘上 7.8% → 看起来
 
 表现为「首帧正常、点一下就变黑」。项目内所有 `setShader(...)` 之前都强制 `setAlpha(255)`。
 
+### 卡片图标：别直接借别人的 `Icon`
+
+卡片右上角的图标优先用"正在播放的那个 App"的图标，这里有两个必须注意的点：
+
+1. **不能把别家的 `ResourceIcon` 直接塞进自己的通知**。`Icon` 只是"某包某资源 ID"的引用，系统渲染时要在另一个进程/身份下去加载外部包资源，ColorOS 上会错位。正确做法是在自己进程里用该包的 `Resources` 把它画成位图，再用 `Icon.createWithBitmap()` 带出去。
+2. **切换 App 时必须重算，取不到就置空**。旧代码只在匹配成功时覆盖 `playingIcon`，匹配不到就一直留着上一个 App 的图标——表现为"酷狗在播、卡片顶着网易云图标"。
+3. 有些播放器**播放时根本不发通知**（如酷狗概念版，`dumpsys notification` 里查不到它的记录），此时退到用 `PackageManager.getApplicationIcon()` 拿启动图标，再取不到才用内置波形图标。
+
+另外，ColorOS 流体云卡片的图标走的是 OPLUS 私有字段，而不是标准 `smallIcon`：
+
+```
+icon=Icon(typ=RESOURCE ...)                 ← 标准小图标
+oplus_smallicon_use_app_icon=Boolean (true)
+oplus_small_icon=Icon (Icon(typ=BITMAP ...)) ← 流体云实际渲染的图标
+```
+
+排查图标问题时，`dumpsys notification --noredact` 里要看 `oplus_small_icon` 这一行。
+
 ---
 
 ## 版本记录
@@ -286,6 +304,7 @@ paint.setShader(gradient);           // 渐变亮度被乘上 7.8% → 看起来
 | 8.6 | 新增响度表（RMS / 峰值 / 短时 LUFS）、节拍 BPM（带半速/倍速备选值）、音高音名与音分；修复 BPM 倍频误判、音高乱跳与边界伪峰、削波误报、停播后读数残留；诊断日志改为常开并支持一键导出分享 |
 | 8.7 | 状态栏实时卡片接入 Android 16 的 promoted ongoing notification（ColorOS 流体云上岛）；刷视频自动隐藏改为三路判定（媒体会话 / 分身通知 / Shizuku 读前台应用）+ 15 秒宽限 + 即时撤卡，修掉分身场景下"空会话分支直接 return"导致判定全失效的根因；开关恢复系统原生外观并按状态着色（修 10 个开关关闭态不变色）；清理全部调试残留；修 `MediaWatcher.detach()` 静态单例泄漏；削波判定收紧到真实满刻度（连续 32 采样）；换用独立发布密钥签名 |
 | 8.8 | Shizuku 一键授权新增「通知使用权」（先解绑再重绑，顺带修僵尸绑定），执行后回查系统设置确认结果，并让 `shell()` 捕获 stderr 以免失败被静默吞掉；新增上岛自检：通知使用权 / 监听是否真连上 / 通知权限 / `canPostPromotedNotifications()` 四项，只在有阻碍时提示原因（修掉读到设置旧缓存导致"授权成功却说没开"的误报） |
+| 8.9 | 监听服务掉线自愈：`ensureConnected()` 首次用 `requestRebind()`，仍失败且有 Shizuku 时升级为强制解绑重绑（约 20 秒一轮，实测约 9 秒恢复），修掉 ColorOS 僵尸绑定导致所有播放器都读不到歌名的问题；卡片图标改为本地渲染位图 + 三级兜底（通知小图标 → 应用启动图标 → 内置波形），修掉"酷狗在播却显示网易云图标"（旧代码从不清理 `playingIcon`，且酷狗概念版播放时不发通知） |
 
 ---
 

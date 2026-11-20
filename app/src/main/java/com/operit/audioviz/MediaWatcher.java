@@ -67,6 +67,8 @@ public final class MediaWatcher {
     private MediaController controller;
     private NotificationListenerService nls;
     private android.graphics.drawable.Icon playingIcon;
+    /** 上一次成功取到图标的包名，用于判断是否该清掉旧图标 */
+    private String lastIconPkg = "";
 
     private final Runnable poll = new Runnable() {
         @Override
@@ -81,8 +83,68 @@ public final class MediaWatcher {
         }
     };
 
+    /** 应用启动图标缓存（同一包只加载一次） */
+    private final java.util.HashMap<String, android.graphics.drawable.Icon> appIconCache = new java.util.HashMap<>();
+
+    /**
+     * 应用的启动图标（渲染成 96px 位图）。用于播放器不发通知、借不到小图标时兜底，
+     * 至少显示的仍是这个 App 自己的图标。
+     */
+    private android.graphics.drawable.Icon appIcon(String pkg) {
+        if (pkg == null) return null;
+        if (appIconCache.containsKey(pkg)) return appIconCache.get(pkg);
+        android.graphics.drawable.Icon out = null;
+        try {
+            android.graphics.drawable.Drawable d = ctx.getPackageManager().getApplicationIcon(pkg);
+            if (d != null) {
+                int s = 96;
+                Bitmap bm = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888);
+                android.graphics.Canvas cv = new android.graphics.Canvas(bm);
+                d.setBounds(0, 0, s, s);
+                d.draw(cv);
+                out = android.graphics.drawable.Icon.createWithBitmap(bm);
+            }
+        } catch (Throwable t) {
+            Log.i(TAG, "mw appicon fail " + pkg + " " + t);
+        }
+        appIconCache.put(pkg, out);
+        return out;
+    }
+
+    /**
+     * 把"别的应用的通知小图标"在本进程里绘制成位图再带走。
+     * 直接传 ResourceIcon 会让系统在渲染我们的通知时去加载外部包资源，
+     * 实测会失败或显示成另一个应用的图标（酷狗在播却显示网易云图标）。
+     */
+    private android.graphics.drawable.Icon toBitmapIcon(String pkg, android.graphics.drawable.Icon src) {
+        try {
+            android.graphics.drawable.Drawable d = null;
+            if (src.getType() == android.graphics.drawable.Icon.TYPE_RESOURCE) {
+                try {
+                    String rp = src.getResPackage();
+                    Context pc = (rp != null && !rp.equals(ctx.getPackageName()))
+                            ? ctx.createPackageContext(rp, 0) : ctx;
+                    d = pc.getResources().getDrawable(src.getResId(), null);
+                } catch (Throwable ignored) {
+                }
+            }
+            if (d == null) d = src.loadDrawable(ctx);
+            if (d == null) return null;
+            int s = 96;
+            Bitmap bm = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888);
+            android.graphics.Canvas cv = new android.graphics.Canvas(bm);
+            d.setBounds(0, 0, s, s);
+            d.draw(cv);
+            return android.graphics.drawable.Icon.createWithBitmap(bm);
+        } catch (Throwable t) {
+            Log.i(TAG, "mw icon render fail " + pkg + " " + t);
+            return null;
+        }
+    }
+
     public void attach(NotificationListenerService svc) {
         connected = true;
+        rebindTries = 0;
         if (polling) return;
         nls = svc;
         ctx = svc.getApplicationContext();
@@ -114,6 +176,7 @@ public final class MediaWatcher {
         nls = null;
         ctx = null;
         playingIcon = null;
+        lastIconPkg = "";
         clear();
         Log.i(TAG, "mw detach");
     }
@@ -123,17 +186,36 @@ public final class MediaWatcher {
     }
 
     private long lastRebind;
+    /** 连续失败的软重绑次数，超过阈值后升级为 Shizuku 强制解绑重绑 */
+    private int rebindTries;
 
     /**
-     * 若通知使用权还没真正连上（重装 APK 后 ColorOS 常出现"系统显示已连接、
-     * 但 onListenerConnected 不回调"的假连接），主动请求系统重绑一次。
-     * 限频 8 秒，避免频繁打扰系统。
+     * 若通知使用权还没真正连上（重装 APK 或重启后 ColorOS 常出现
+     * "设置里显示已授权、但 onListenerConnected 不回调"的僵尸绑定），主动救一次。
+     *
+     * 前两次用官方 NotificationListenerService.requestRebind()（不需要额外权限，
+     * 但 ColorOS 上经常被直接忽略）；仍不成功且有 Shizuku 时，改用
+     * `cmd notification disallow_listener/allow_listener` 强制重绑——实测这条必成。
      */
     public void ensureConnected(Context c) {
         if (msm != null || c == null) return;
         long now = android.os.SystemClock.elapsedRealtime();
         if (now - lastRebind < 8000L) return;
         lastRebind = now;
+        rebindTries++;
+        String comp = c.getPackageName() + "/" + MediaWatcherService.class.getName();
+        if (rebindTries > 1 && ShizukuHelper.hasPermission()) {
+            Log.i(TAG, "mw force rebind try=" + rebindTries);
+            new Thread(() -> {
+                String out = ShizukuHelper.shell(
+                        "cmd notification disallow_listener " + comp
+                                + "; sleep 1; cmd notification allow_listener " + comp);
+                Log.i(TAG, "mw force rebind out=" + out.replace('\n', ' '));
+            }, "mw-rebind").start();
+            // 强制重绑本身要 1 秒 + 系统重连要几秒，放宽到 20 秒再试下一轮
+            lastRebind = now + 12000L;
+            return;
+        }
         try {
             // 先解绑（清掉系统侧的僵尸 binder），再请求重绑
             if (nls != null) {
@@ -144,7 +226,7 @@ public final class MediaWatcher {
             }
             NotificationListenerService.requestRebind(
                     new android.content.ComponentName(c, MediaWatcherService.class));
-            Log.i(TAG, "mw rebind req");
+            Log.i(TAG, "mw rebind req try=" + rebindTries);
         } catch (Throwable t) {
             Log.i(TAG, "mw rebind fail " + t);
         }
@@ -423,21 +505,40 @@ public final class MediaWatcher {
         controller = best;
         // 标记当前会话是否属于"视频类"应用（刷短视频/看视频）
         applyVideoFlag(isVideoPkg(np) || videoByNotif);
-        // 取"正在播放的那个 App"自己的通知小图标，用作状态栏胶囊图标
+        // 取"正在播放的那个 App"的图标，用作状态栏卡片/胶囊图标。
+        // 顺序：应用启动图标 → 通知小图标 → 内置波形图标。
+        // 之所以把"启动图标"放第一位：启动图标只取决于包名，任何播放器都必然有，
+        // 行为一致、可预测；而"通知小图标"要看播放器肯不肯发通知（酷狗概念版就
+        // 播放时不发）、用什么图标（有的塞纯白占位图），各 App 表现不同，不能当主路径。
+        // 所有图标都在本进程画成位图（BitmapIcon）再带出去，不把别家的
+        // ResourceIcon 直接塞进我们的通知——那会让系统跨包加载资源，可能错位。
+        // 换 App 时必须重算，绝不能残留上一个 App 的图标（这就是"酷狗在播却显示
+        // 网易云图标"的原因：旧代码从不清理 playingIcon）。
         try {
-            if (nls != null) {
-                android.service.notification.StatusBarNotification[] arr = nls.getActiveNotifications();
-                if (arr != null) {
-                    for (int i = 0; i < arr.length; i++) {
-                        if (arr[i] == null || !np.equals(arr[i].getPackageName())) continue;
-                        android.app.Notification an = arr[i].getNotification();
-                        android.graphics.drawable.Icon ic = an == null ? null : an.getSmallIcon();
-                        if (ic != null) {
-                            playingIcon = ic;
-                            break;
+            if (nls != null && np != null && !np.equals(lastIconPkg)) {
+                android.graphics.drawable.Icon ic = appIcon(np);
+                String src = ic != null ? "launcher" : "own";
+                if (ic == null) {
+                    try {
+                        android.service.notification.StatusBarNotification[] arr = nls.getActiveNotifications();
+                        if (arr != null) {
+                            for (int i = 0; i < arr.length; i++) {
+                                if (arr[i] == null || !np.equals(arr[i].getPackageName())) continue;
+                                android.app.Notification an = arr[i].getNotification();
+                                android.graphics.drawable.Icon si = an == null ? null : an.getSmallIcon();
+                                if (si != null) {
+                                    ic = toBitmapIcon(np, si);
+                                    if (ic != null) src = "notif";
+                                    break;
+                                }
+                            }
                         }
+                    } catch (Throwable ignored) {
                     }
                 }
+                playingIcon = ic;
+                lastIconPkg = np;
+                Log.i(TAG, "mw icon " + np + " -> " + src);
             }
         } catch (Throwable ignored) {
         }

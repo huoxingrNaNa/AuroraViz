@@ -1123,7 +1123,7 @@ public class MainActivity extends Activity {
                 return "上岛自检：通知使用权未开启 ——点「一键授权」可自动开启";
             }
             if (OverlayService.isRunning()) {
-                return "上岛自检：通知使用权已开，但监听服务未连上 ——重启本应用或重新点「一键授权」";
+                return "上岛自检：通知使用权已开，但监听服务未连上 ——点「一键授权」可强制重绑；没有 Shizuku 就到系统设置 › 通知使用权 里关闭再打开本应用";
             }
         }
         if (Build.VERSION.SDK_INT >= 33
