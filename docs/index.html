@@ -213,7 +213,7 @@
 
 <main>
   <div class="wrap hero">
-    <span class="badge"><span class="dot"></span>v8.6 · MIT 开源 · 不联网</span>
+    <span class="badge"><span class="dot"></span><span id="verTag">v8.9.3</span> · MIT 开源 · 不联网</span>
     <h1>把正在播放的声音<br><span>变成看得见的画面</span></h1>
     <p class="sub">Android 端实时音频可视化工具。麦克风或系统音频采集，6 种可视化风格随手切换，悬浮窗浮在桌面上，还能把画面连同音轨一起导出成视频。</p>
     <div class="cta">
@@ -226,7 +226,7 @@
         GitHub 仓库
       </a>
     </div>
-    <p class="meta">APK 约 134 KB · 无需登录 · 无广告 · 无统计 SDK · Android 8.0 及以上</p>
+    <p class="meta"><span id="apkSize">约 144 KB</span> · 无需登录 · 无广告 · 无统计 SDK · Android 8.0 及以上</p>
 
     <div class="stage">
       <canvas id="viz" aria-label="频谱可视化动画"></canvas>
@@ -288,7 +288,7 @@
             <tr><td>码率</td><td>8 · 12 · 20 Mbps</td><td>快速分享用 8M，画质优先用 20M</td></tr>
             <tr><td>画面平滑</td><td>紧凑 · 标准 · 柔和</td><td>紧凑跟得快、跳得明显；柔和更像呼吸</td></tr>
             <tr><td>时长</td><td>15 / 30 / 60 秒 · 整首</td><td>导入本地音频时可跟随歌曲长度</td></tr>
-            <tr><td>音轨</td><td>含音轨 · 静音</td><td>只要画面不要声音时选静音</td></tr>
+            <tr><td>音轨</td><td>始终包含（AAC）</td><td>可勾选「导出时静音播放」，只渲染画面不发声；音轨本身仍写入文件</td></tr>
           </tbody>
         </table>
       </div>
@@ -469,6 +469,29 @@
   } else {
     tick();
   }
+})();
+</script>
+
+<script>
+//版本号与安装包体积直接从 GitHub 最新 Release 读取，发版后页面自动更新；
+//请求失败（离线/被拦）时保留上面写死的静态值，不影响浏览。
+(function () {
+  var API = "https://api.github.com/repos/huoxingrNaNa/AuroraViz/releases/latest";
+  fetch(API, { headers: { "Accept": "application/vnd.github+json" } })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) {
+      if (!d) return;
+      if (d.tag_name) {
+        var t = document.getElementById("verTag");
+        if (t) t.textContent = "v" + String(d.tag_name).replace(/^v/i, "");
+      }
+      var apk = (d.assets || []).filter(function (a) { return /\.apk$/i.test(a.name); })[0];
+      if (apk && apk.size) {
+        var el = document.getElementById("apkSize");
+        if (el) el.textContent = "约 " + Math.round(apk.size / 1024) + " KB";
+      }
+    })
+    .catch(function () { /* 保持静态值 */ });
 })();
 </script>
 </body>

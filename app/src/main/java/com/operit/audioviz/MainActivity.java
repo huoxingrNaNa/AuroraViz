@@ -61,6 +61,10 @@ public class MainActivity extends Activity {
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
     /** 延迟做一次"上岛自检"，等监听服务重连/系统状态落定后再判断 */
     private final Runnable liveCardCheck = this::checkLiveCardDiag;
+    /** 自检自己写进提示区的文案：用于「连上之后自动撤销」，不误删别的提示 */
+    private String liveCardAutoMsg = "";
+    /** 自检剩余复检次数（连不上时每 5 秒复查一次，最多 6 次） */
+    private int liveCardRecheck = 0;
     private GradientButton btnToggle;
     private GhostButton btnAuth;
     private GhostButton btnRecord;
@@ -898,6 +902,8 @@ public class MainActivity extends Activity {
                 ? "监听中会显示可拖动悬浮窗，随时可关闭"
                 : "仅在本应用内显示可视化，不弹悬浮窗");
         btnToggle.invalidate();
+        // 状态变化（开始/停止监听等）后立刻重判一次自检：已畅通就撤掉残留提示
+        if (message != null && Prefs.liveCard(this)) checkLiveCardDiag();
     }
 
     private void updateShizukuUi() {
@@ -1188,7 +1194,8 @@ public class MainActivity extends Activity {
                 return "上岛自检：通知使用权未开启 ——点「一键授权」可自动开启";
             }
             if (OverlayService.isRunning()) {
-                return "上岛自检：通知使用权已开，但监听服务未连上 ——点「一键授权」可强制重绑；没有 Shizuku 就到系统设置 › 通知使用权 里关闭再打开本应用";
+                return "上岛自检：监听服务未连上 ——点「一键授权」重绑（需 Shizuku）；"
+                        + "否则到系统设置 › 通知使用权 里关掉再打开本应用";
             }
         }
         if (Build.VERSION.SDK_INT >= 33
@@ -1209,13 +1216,43 @@ public class MainActivity extends Activity {
         return "";
     }
 
-    /** 自检有阻碍时把原因写到提示区（同时留一行日志备查） */
+    /**
+     * 自检：有阻碍时把原因写到提示区，并每 5 秒复检一次（最多 6 次 / 30 秒）。
+     * 一旦阻碍消失就撤掉这条提示——否则"启动瞬间还没连上"会被永久挂在界面上。
+     * 只撤自己写的文案，别的提示（授权结果、错误等）不动。
+     */
     private void checkLiveCardDiag() {
-        if (message.getVisibility() == View.VISIBLE) return;
         String diag = liveCardDiag();
-        if (!diag.isEmpty()) {
-            Log.i(TAG, "livecard " + diag);
-            showMessage(diag);
+        String shown = message.getVisibility() == View.VISIBLE ? String.valueOf(message.getText()) : "";
+        boolean ours = !liveCardAutoMsg.isEmpty() && shown.equals(liveCardAutoMsg);
+
+        if (diag.isEmpty()) {
+            if (ours) {
+                clearMessage();
+                Log.i(TAG, "livecard ok, cleared");
+            }
+            liveCardAutoMsg = "";
+            liveCardRecheck = 0;
+            return;
+        }
+
+        // 提示区被别的提示占用（且不是上次自检写的），让位，只留日志
+        if (!shown.isEmpty() && !ours) {
+            Log.i(TAG, "livecard busy: " + diag);
+            return;
+        }
+
+        if (!diag.equals(liveCardAutoMsg)) {
+            liveCardAutoMsg = diag;
+            liveCardRecheck = 0;
+        }
+        Log.i(TAG, "livecard " + diag);
+        showMessage(diag);
+
+        if (liveCardRecheck < 6) {
+            liveCardRecheck++;
+            uiHandler.removeCallbacks(liveCardCheck);
+            uiHandler.postDelayed(liveCardCheck, 5000);
         }
     }
 
