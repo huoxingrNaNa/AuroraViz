@@ -49,9 +49,26 @@ Android 音频可视化应用：**悬浮窗 + 应用内双通道显示**，纯 J
 
 - **导入本地音频**（mp3 / wav / flac / m4a / ogg）：`MediaExtractor` + `MediaCodec` 解码 → `AudioTrack` 播放 → PCM 实时喂给 `AudioEngine` 做频谱分析
 - 预览区实时显示当前模式与配色
-- 时长可选 **15 / 30 / 60 秒 / 整首**
+- 时长可选 **15 / 30 / 60 秒 / 整首**（整首最长按 600 秒截断）
 - 「导出时静音播放」：不发声，只渲染画面
-- 不选文件时也可以直接录当前监听画面
+- 不选文件时也可以直接录当前监听画面（此时画面与音轨都取自当前监听源）
+
+可调输出参数：
+
+| 项 | 可选值 |
+|---|---|
+| 分辨率 | 720p（1280×720）· 1080p（1920×1080） |
+| 帧率 | 30 · 50 · 60 fps |
+| 码率 | 8 · 12 · 20 Mbps（H.264，VBR） |
+| 平滑度 | 紧凑 · 标准 · 柔和（`VideoRecorder.setSmoothTau`） |
+| 音轨 | 恒开，AAC-LC 混流（`AacEncoder`） |
+
+音轨来自两条路径之一，都能带上：
+
+- **选了文件** → 文件解码出的 PCM（`FileAudioPlayer.PcmListener` 直接 tee 给 `VideoRecorder.feedPcm`），与原曲同步
+- **没选文件** → 当前监听源的实时 PCM（`AudioEngine.setPcmSink`），麦克风或系统音频
+
+导出结束时界面会显示 **含音轨 / 无音轨**：没声音通常是因为监听源被目标应用禁止录制（见「已知限制」），或未开监听只录到待机动画。
 
 输出到公共目录：
 
@@ -59,7 +76,7 @@ Android 音频可视化应用：**悬浮窗 + 应用内双通道显示**，纯 J
 /sdcard/Movies/AuroraViz/aurora_yyyyMMdd_HHmmss.mp4
 ```
 
-- 规格：960×540 · 30 fps · H.264 High · 约 700 kb/s（Android 10+ 通过 MediaStore 写入，相册可见）
+- Android 10+ 通过 MediaStore 写入，相册可见
 - 录制中按钮显示剩余秒数，再次点击可提前结束（已录部分仍是完整可播文件）
 - 管线：独立 `VisualizerView` → `Bitmap`(Canvas) → `GlBlitter`(OpenGL ES) → `MediaCodec` 输入 Surface → `MediaMuxer`
 - 说明：MediaCodec 的输入 Surface **不能 `lockCanvas`**，必须走 GL；画面与界面上的实例分离，互不干扰
@@ -128,7 +145,7 @@ cmd notification allow_listener    <pkg>/<pkg>.MediaWatcherService
 | `0 帧 · 电平 -∞ dB` | 目标应用禁止被录制（系统级拒绝） |
 | `669 帧 · 电平 -15 dB · 静音 0.0s` | 捕获正常 |
 
-**导出的视频目前不含音轨**（v3.1）。录制只走视频编码，避免与系统音频捕获争用 `MediaProjection`；后续版本会加 PCM tee + AAC 混流。
+**导出音轨依赖音频源本身有声**。音轨已实现（PCM tee → `AacEncoder` → `MediaMuxer` 混流），但若监听源被目标应用禁止录制（上一条限制），导出的文件就只有画面；导出结束时界面会明确写「无音轨」，不会静默留下一段无声视频。
 
 ---
 
@@ -315,6 +332,7 @@ oplus_small_icon=Icon (Icon(typ=BITMAP ...)) ← 流体云实际渲染的图标
 | 8.8 | Shizuku 一键授权新增「通知使用权」（先解绑再重绑，顺带修僵尸绑定），执行后回查系统设置确认结果，并让 `shell()` 捕获 stderr 以免失败被静默吞掉；新增上岛自检：通知使用权 / 监听是否真连上 / 通知权限 / `canPostPromotedNotifications()` 四项，只在有阻碍时提示原因（修掉读到设置旧缓存导致"授权成功却说没开"的误报） |
 | 8.9 | 监听服务掉线自愈：`ensureConnected()` 首次用 `requestRebind()`，仍失败且有 Shizuku 时升级为强制解绑重绑（约 20 秒一轮，实测约 9 秒恢复），修掉 ColorOS 僵尸绑定导致所有播放器都读不到歌名的问题；卡片图标改为本地渲染位图 + 三级兜底（通知小图标 → 应用启动图标 → 内置波形），修掉"酷狗在播却显示网易云图标"（旧代码从不清理 `playingIcon`，且酷狗概念版播放时不发通知） |
 | 8.9.1 | 「刷新率」档位补上向系统申请高刷（`preferredRefreshRate`，自动取屏幕最高、超能力回落），接入主界面/悬浮窗/导出预览，修掉部分 ROM 上"自动与 120 都只有 60Hz"；「状态栏实时卡片」下方按本机能力显示说明并在首次打开时弹一次提示，把"常驻通知卡片"与"上岛"的要求分开讲 |
+| 8.9.2 | 文档与显示校正（无功能变更）：导出页参数补全为 720p/1080p · 30/50/60 fps · 8/12/20 Mbps · 平滑三档 · AAC 恒开，「已知限制」不再误写"导出不含音轨"（与 3.6–3.8 的记录自相矛盾）；「关于」页版本号去掉 XML 里的硬编码占位（运行时本来就读 `versionName`，占位文案一直停在 5.5） |
 
 ---
 
