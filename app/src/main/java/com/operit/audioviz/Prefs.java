@@ -23,6 +23,12 @@ public final class Prefs {
     private static final String K_C1 = "custom_c1";
     private static final String K_C2 = "custom_c2";
     private static final String K_IDLE = "idle_anim";
+    /** 应用内保持屏幕常亮 */
+    private static final String K_KEEP_ON = "keep_screen_on";
+    /** 全屏预览时是否隐藏系统栏（部分 ROM 在沉浸态会把窗口锁 60Hz，可关掉试试） */
+    private static final String K_FS_HIDE_BARS = "fs_hide_bars";
+    /** 全屏预览是否允许横屏（关掉可用来判断"转屏请求"是否触发了降档） */
+    private static final String K_FS_LANDSCAPE = "fs_landscape";
     private static final String K_DIAG = "diag_on";
     private static final String K_STEREO = "stereo_on";
     private static final String K_STEREO_MODE = "stereo_mode";
@@ -170,9 +176,33 @@ public final class Prefs {
     public static boolean idleAnim(Context c) {
         return sp(c).getBoolean(K_IDLE, true);
     }
-
     public static void setIdleAnim(Context c, boolean v) {
         sp(c).edit().putBoolean(K_IDLE, v).apply();
+    }
+    /** 应用内保持屏幕常亮（全屏预览时无论开关都会临时常亮） */
+    public static boolean keepOn(Context c) {
+        return sp(c).getBoolean(K_KEEP_ON, false);
+    }
+    public static void setKeepOn(Context c, boolean v) {
+        sp(c).edit().putBoolean(K_KEEP_ON, v).apply();
+    }
+
+    /** 全屏预览时是否隐藏状态栏 / 导航栏（默认隐藏） */
+    public static boolean fsHideBars(Context c) {
+        return sp(c).getBoolean(K_FS_HIDE_BARS, true);
+    }
+
+    public static void setFsHideBars(Context c, boolean v) {
+        sp(c).edit().putBoolean(K_FS_HIDE_BARS, v).apply();
+    }
+
+    /** 全屏预览是否允许横屏（默认允许） */
+    public static boolean fsAllowLandscape(Context c) {
+        return sp(c).getBoolean(K_FS_LANDSCAPE, true);
+    }
+
+    public static void setFsAllowLandscape(Context c, boolean v) {
+        sp(c).edit().putBoolean(K_FS_LANDSCAPE, v).apply();
     }
 
     public static boolean diag(Context c) {

@@ -2,17 +2,18 @@ package com.operit.audioviz;
 
 import android.Manifest;
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.app.NotificationManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.graphics.LinearGradient;
 import android.graphics.Shader;
+import android.hardware.display.DisplayManager;
 import android.media.AudioManager;
 import android.media.projection.MediaProjectionConfig;
 import android.media.projection.MediaProjectionManager;
@@ -23,8 +24,13 @@ import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
 import android.util.Log;
+import android.view.Display;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.Window;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
+import android.view.WindowManager;
 import android.widget.SeekBar;
 import android.widget.Switch;
 import android.widget.TextView;
@@ -99,6 +105,92 @@ public class MainActivity extends Activity {
     private ChipView[] pkChips;
     private ChipView[] hzChips;
     private SwatchView[] swatches;
+
+    // ----全屏预览 /屏幕常亮 /预设 ----
+    /** 全屏预览层（盖住整个界面，只有一块画布） */
+    private View fsLayer;
+    private View fsEntry;
+    private View fsTip;
+    private VisualizerView fsPreview;
+    private boolean fsActive = false;
+    /** 本次全屏是否替用户把浮窗收起来了（退出时由它决定要不要还原） */
+    private boolean fsOverlayHidden = false;
+    private Switch swKeepOn;
+    private Switch swFsBars;
+    private Switch swFsLand;
+    private android.widget.LinearLayout presetRow;
+    private View presetScroll;
+    private TextView presetHint;
+    /** 与预设一一对应的胶囊，用来高亮"当前就是这套" */
+    private ChipView[] presetChips = new ChipView[0];
+    private java.util.List<Presets.Item> presetItems = new java.util.ArrayList<>();
+
+    /**
+     * 全屏期间每秒记一条"实测帧率 + 屏幕当前刷新率"。
+     * 用途：区分两种掉帧原因——①GPU/绘制跟不上（fps < 屏幕 Hz）
+     * ②系统把这块屏降到了 60Hz（fps ≈ 60 且屏幕也是 60）。
+     */
+    private long fsLastDraw = -1L;
+    /** 本次全屏已重新申请帧率的次数（最多2次，防止 120/60 锯齿） */
+    private int fsReasserts = 0;
+    private long fsLastAt = 0L;
+    private final Runnable fsTick = new Runnable() {
+        @Override
+        public void run() {
+            if (!fsActive || fsPreview == null) return;
+            long now = android.os.SystemClock.uptimeMillis();
+            long n = fsPreview.drawCount();
+            if (fsLastAt > 0L) {
+                long dn = n - fsLastDraw;
+                float dt = (now - fsLastAt) / 1000f;
+                if (dt > 0.2f) {
+                    float fps = dn / dt;
+                    float hz = displayHz();
+                    String line = String.format(Locale.US,
+                            "全屏帧率 %.1f fps · 屏幕 %.1f Hz · 画布 %dx%d",
+                            fps, hz, fsPreview.getWidth(), fsPreview.getHeight());
+                    Log.i(TAG, line);
+                    DiagLog.add(line);
+                    // 开了"实时诊断"就在全屏里直接显示，不用去翻日志
+                    if (fsTip instanceof TextView && Prefs.diag(MainActivity.this)) {
+                        ((TextView) fsTip).setText(String.format(Locale.US,
+                                "%.0f fps · 屏幕 %.0f Hz", fps, hz));
+                    }
+                    // 自愈：实测明显低于目标就重新表态一次，但最多试 2 次。
+                    // 有的 ROM 只给几秒高刷然后自己降档，反复申请只会变成 120/60 锯齿
+                    // （实测 121→89.9→60→121），比稳定 60 更难看，所以认命后就不再折腾。
+                    int want = Prefs.vizHzValue(Prefs.vizHz(MainActivity.this));
+                    float target = want > 0 ? want : hz;
+                    if (target > 0f && fps < target * 0.85f) {
+                        if (fsReasserts < 2) {
+                            fsReasserts++;
+                            fsPreview.setRenderHz(want);
+                            Refresh.apply(MainActivity.this);
+                            Log.i(TAG, "帧率掉档，重新申请 " + fsReasserts + "/2 want=" + want);
+                        } else if (fsReasserts == 2) {
+                            fsReasserts++;
+                            Log.i(TAG, "系统把帧率按在 " + (int) hz
+                                    + "Hz，停止重复申请（避免 120/60 锯齿）");
+                        }
+                    }
+                }
+            }
+            fsLastDraw = n;
+            fsLastAt = now;
+            uiHandler.postDelayed(this, 1000L);
+        }
+    };
+
+    /** 屏幕当前实际刷新率（不是我们请求的值） */
+    private float displayHz() {
+        try {
+            DisplayManager dm = (DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
+            Display d = dm == null ? null : dm.getDisplay(Display.DEFAULT_DISPLAY);
+            return d == null ? 0f : d.getMode().getRefreshRate();
+        } catch (Throwable t) {
+            return 0f;
+        }
+    }
 
     private int source;
     private int styleIdx;
@@ -546,6 +638,72 @@ public class MainActivity extends Activity {
             }
         });
 
+        // ----屏幕常亮 ----
+        swKeepOn = findViewById(R.id.swKeepOn);
+        if (swKeepOn != null) {
+            swKeepOn.setChecked(Prefs.keepOn(this));
+            swKeepOn.setOnCheckedChangeListener((bv2, checked) -> {
+                Prefs.setKeepOn(this, checked);
+                applyKeepOn();
+            });
+        }
+        applyKeepOn();
+
+        // ----全屏是否隐藏系统栏（个别 ROM 在沉浸态会锁 60Hz，留个开关）----
+        swFsBars = findViewById(R.id.swFsBars);
+        if (swFsBars != null) {
+            swFsBars.setChecked(Prefs.fsHideBars(this));
+            swFsBars.setOnCheckedChangeListener((bv3, checked) -> {
+                Prefs.setFsHideBars(this, checked);
+                if (fsActive) applyImmersive(checked);
+            });
+        }
+
+        // ----全屏是否允许横屏（关掉可对比"转屏请求是否触发降档"）----
+        swFsLand = findViewById(R.id.swFsLand);
+        if (swFsLand != null) {
+            swFsLand.setChecked(Prefs.fsAllowLandscape(this));
+            swFsLand.setOnCheckedChangeListener((bv4, checked) -> {
+                Prefs.setFsAllowLandscape(this, checked);
+                if (fsActive) {
+                    try {
+                        setRequestedOrientation(checked
+                                ? ActivityInfo.SCREEN_ORIENTATION_SENSOR
+                                : ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+                    } catch (Throwable ignored) {
+                    }
+                }
+            });
+        }
+
+        // ----全屏预览：点预览区或左上角「全屏」进，点画面 /返回键出 ----
+        fsLayer = findViewById(R.id.fsLayer);
+        fsPreview = findViewById(R.id.fsPreview);
+        fsTip = findViewById(R.id.fsTip);
+        fsEntry = findViewById(R.id.fsEntry);
+        View previewCard = findViewById(R.id.previewCard);
+        if (previewCard != null) previewCard.setOnClickListener(v -> enterFullscreen());
+        if (fsEntry != null) fsEntry.setOnClickListener(v -> enterFullscreen());
+        if (fsLayer != null) fsLayer.setOnClickListener(v -> exitFullscreen());
+
+        // ----预设 ----
+        presetRow = findViewById(R.id.presetRow);
+        presetScroll = findViewById(R.id.presetScroll);
+        presetHint = findViewById(R.id.presetHint);
+        TextView btnPresetSave = findViewById(R.id.btnPresetSave);
+        if (btnPresetSave != null) {
+            btnPresetSave.setOnClickListener(v -> {
+                String saved = Presets.save(this, Presets.capture(this));
+                if (saved == null) {
+                    showMessage("预设最多 " + Presets.MAX + " 条，长按列表里旧的删掉再存");
+                    return;
+                }
+                rebuildPresetRow();
+                Toast.makeText(this, "已保存预设：" + saved, Toast.LENGTH_SHORT).show();
+            });
+        }
+        rebuildPresetRow();
+
         swOverlay.setChecked(Prefs.overlayEnabled(this));
         swOverlay.setOnCheckedChangeListener((buttonView, isChecked) -> {
             if (suppressOverlay) return;
@@ -674,11 +832,15 @@ public class MainActivity extends Activity {
             uiHandler.removeCallbacks(liveCardCheck);
             uiHandler.postDelayed(liveCardCheck, 1500);
         }
+        // 回到前台时重新对齐窗口标志（别的界面可能会改动它）
+        applyKeepOn();
     }
 
     @Override
     protected void onPause() {
         uiHandler.removeCallbacks(diagTick);
+        // 切到后台时退出全屏，避免回来看到"卡在全屏"的状态
+        if (fsActive) exitFullscreen();
         super.onPause();
     }
 
@@ -695,6 +857,35 @@ public class MainActivity extends Activity {
         ShizukuHelper.removePermissionListener(shizukuListener);
         uiHandler.removeCallbacks(diagTick);
         super.onDestroy();
+    }
+
+    @Override
+    public void onBackPressed() {
+        // 全屏时返回键先退出全屏，不要直接退出应用
+        if (fsActive) {
+            exitFullscreen();
+            return;
+        }
+        super.onBackPressed();
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        // 下拉通知栏、切回来时系统会把栏放出来，这里补一次隐藏
+        if (hasFocus && fsActive) applyImmersive(Prefs.fsHideBars(this));
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        // 横竖切换后系统栏会重新出现，补一次隐藏；全屏层本身是 match_parent，会自己重排
+        if (fsActive) applyImmersive(Prefs.fsHideBars(this));
+        // 转屏后重新申请一次刷新率（有的 ROM 会在换模式时把窗口的偏好值丢掉）
+        Refresh.apply(this);
+        Log.i(TAG, String.format(Locale.US, "转屏 %s displayHz=%.1f wantHz=%d",
+                newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE ? "横屏" : "竖屏",
+                displayHz(), Refresh.targetHz(this)));
     }
 
     // ------------------------------------------------------------ 界面风格
@@ -845,7 +1036,8 @@ public class MainActivity extends Activity {
         ColorStateList thumbCl = stateTint(sc1, 0xFF6E7484);
         ColorStateList trackCl = stateTint(withAlpha(sc2, 0.55f), 0xFF3C414E);
         Switch[] sws = new Switch[]{swLiveCard, swHideVideo, swBare, swAutoSens,
-                swFreqAxis, swModeLabel, swOverlay, swIdle, swDiag, swStereo};
+                swFreqAxis, swModeLabel, swOverlay, swIdle, swDiag, swStereo, swKeepOn,
+                swFsBars, swFsLand};
         for (Switch swX : sws) {
             if (swX != null) {
                 swX.setThumbTintList(thumbCl);
@@ -854,6 +1046,8 @@ public class MainActivity extends Activity {
         }
         updateAudioHint();
         applyTitleGradient();
+        // 设置一变就重算"当前高亮的是哪条预设"
+        syncPresetSelection();
     }
 
     /**
@@ -1175,11 +1369,8 @@ public class MainActivity extends Activity {
                 ? "本机已满足上岛条件；若状态栏没出现胶囊，点「一键授权」或检查系统总开关。"
                 : extra);
         try {
-            new AlertDialog.Builder(this)
-                    .setTitle("关于「上岛」")
-                    .setMessage(msg)
-                    .setPositiveButton("知道了", null)
-                    .show();
+            new ConfirmDialog(this, Palette.byIndex(paletteIdx),
+                    "关于「上岛」", msg, "知道了", null, false).show();
         } catch (Throwable t) {
             Log.i(TAG, "live tip fail " + t);
         }
@@ -1254,6 +1445,292 @@ public class MainActivity extends Activity {
             uiHandler.removeCallbacks(liveCardCheck);
             uiHandler.postDelayed(liveCardCheck, 5000);
         }
+    }
+
+    // ------------------------------------------------------------ 全屏预览 /常亮
+
+    /** 把主预览的可视化参数复制给全屏视图（两者读同一份引擎数据，只是画布不同） */
+    private void copyVisualSettings(VisualizerView from, VisualizerView to) {
+        if (from == null || to == null) return;
+        to.setStyle(Style.byIndex(styleIdx));
+        to.setPalette(Palette.byIndex(paletteIdx));
+        to.setStereo(curStereoMode());
+        to.setPeakMode(Prefs.peakGlow(this));
+        to.setFreqAxis(Prefs.freqAxis(this));
+        to.setIdleAnim(Prefs.idleAnim(this));
+        to.setSmoothTau(Prefs.vizSmoothTau(this));
+        to.setRenderHz(Prefs.vizHzValue(Prefs.vizHz(this)));
+    }
+
+    private void enterFullscreen() {
+        if (fsActive || fsLayer == null || fsPreview == null) return;
+        copyVisualSettings(preview, fsPreview);
+        // 全屏时模式标签走"顶部居中"锚点，底部整条留给画面
+        fsPreview.setShowModeLabel(true);
+        fsPreview.setModeLabelAnchor(2);
+        fsPreview.setLabelTopDp(24f);
+        fsActive = true;
+        fsLayer.setAlpha(0f);
+        fsLayer.setVisibility(View.VISIBLE);
+        fsLayer.animate().alpha(1f).setDuration(160).start();
+        if (fsTip != null) {
+            fsTip.animate().cancel();
+            if (Prefs.diag(this)) {
+                // 开"实时诊断"时这行留着当帧率表，由 fsTick 每秒刷新
+                ((TextView) fsTip).setText("…");
+                fsTip.setAlpha(0.8f);
+            } else {
+                ((TextView) fsTip).setText("轻触画面退出全屏");
+                fsTip.setAlpha(1f);
+                // 提示只留两秒，之后让画面自己说话
+                fsTip.animate().alpha(0f).setStartDelay(2200).setDuration(600).start();
+            }
+        }
+        // 浮窗会盖在画面上面，全屏期间先替用户收起来（不改设置，退出时还原）
+        requestTempOverlayHide(true);
+        // 主预览这会儿被全屏层盖住，停掉它的自驱重绘省一半绘制量；
+        // 但保持 VISIBLE——不可见的视图会从窗口的帧率投票里退出，实测会让系统直接降到 60
+        if (preview != null) {
+            preview.setSelfDrive(false);
+        }
+        // 全屏允许横屏（可在设置里关掉对比）；关掉时维持竖屏锁定
+        if (Prefs.fsAllowLandscape(this)) {
+            try {
+                setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR);
+            } catch (Throwable ignored) {
+            }
+        }
+        // 旋转 / 换窗口后重新申请一次刷新率，并记下系统真正在跑的 Hz
+        Refresh.apply(this);
+        Log.i(TAG, String.format(Locale.US, "全屏进入 displayHz=%.1f wantHz=%d",
+                displayHz(), Refresh.targetHz(this)));
+        uiHandler.removeCallbacks(fsTick);
+        fsLastDraw = -1L;
+        fsLastAt = 0L;
+        fsReasserts = 0;
+        uiHandler.postDelayed(fsTick, 1200L);
+        // 视图到这一步才真正可见，帧率申请在可见之后重申一次
+        //（对 GONE 视图调 setRequestedFrameRate 有可能不生效）
+        fsPreview.setRenderHz(Prefs.vizHzValue(Prefs.vizHz(this)));
+        Refresh.apply(this);
+        applyImmersive(Prefs.fsHideBars(this));
+        applyKeepOn();
+    }
+
+    private void exitFullscreen() {
+        if (!fsActive) return;
+        fsActive = false;
+        uiHandler.removeCallbacks(fsTick);
+        // 把主预览的绘制恢复回来（全屏期间它被挂起了）
+        if (preview != null) {
+            preview.setVisibility(View.VISIBLE);
+            preview.setSelfDrive(true);
+            preview.setRenderHz(Prefs.vizHzValue(Prefs.vizHz(this)));
+            preview.invalidate();
+        }
+        boolean landscape = getResources().getConfiguration().orientation
+                == Configuration.ORIENTATION_LANDSCAPE;
+        // 先把浮窗还回去，再处理画面与系统栏
+        requestTempOverlayHide(false);
+        try {
+            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+        } catch (Throwable ignored) {
+        }
+        if (fsLayer != null) fsLayer.animate().cancel();
+        if (landscape && fsLayer != null) {
+            // 横屏退出：先留住画面，等转回竖屏再撤层 + 放系统栏，
+            // 否则会闪一下"横版主界面 + 系统栏压在画面上"
+            uiHandler.postDelayed(() -> {
+                if (fsActive) return;
+                fsLayer.setVisibility(View.GONE);
+                applyImmersive(false);
+            }, 380);
+        } else {
+            if (fsLayer != null) fsLayer.setVisibility(View.GONE);
+            applyImmersive(false);
+        }
+        applyKeepOn();
+    }
+
+    /**
+     * 全屏期间临时收起 / 还原浮窗。
+     * 只发 ACTION_TEMP_OVERLAY，不写 Prefs.overlayEnabled——
+     * 用户"显示悬浮窗"的开关以及悬浮窗位置都不会被动到。
+     */
+    private void requestTempOverlayHide(boolean hide) {
+        if (!OverlayService.isRunning()) {
+            fsOverlayHidden = false;
+            return;
+        }
+        if (hide) {
+            // 用户本来就没让浮窗显示（或已经用 ✕ 收起了），那就不用管
+            if (!Prefs.overlayEnabled(this)) {
+                fsOverlayHidden = false;
+                return;
+            }
+            fsOverlayHidden = true;
+        } else if (!fsOverlayHidden) {
+            return;
+        }
+        try {
+            startService(new Intent(this, OverlayService.class)
+                    .setAction(OverlayService.ACTION_TEMP_OVERLAY)
+                    .putExtra(OverlayService.EXTRA_TEMP_HIDE, hide));
+        } catch (Exception ignored) {
+        }
+        if (!hide) fsOverlayHidden = false;
+    }
+
+    /** 隐藏 / 恢复系统栏：API 30 起用 WindowInsetsController，26~29 退回旧的 systemUiVisibility */
+    private void applyImmersive(boolean on) {
+        Window w = getWindow();
+        if (Build.VERSION.SDK_INT >= 30) {
+            WindowInsetsController c = w.getInsetsController();
+            if (c == null) return;
+            if (on) {
+                // 上滑可临时唤出系统栏，几秒后自动再隐藏
+                c.setSystemBarsBehavior(
+                        WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+                c.hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
+            } else {
+                c.show(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
+            }
+        } else {
+            int flags = View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                    | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                    | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
+            if (on) {
+                flags |= View.SYSTEM_UI_FLAG_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
+            }
+            w.getDecorView().setSystemUiVisibility(flags);
+        }
+    }
+
+    /** 常亮 = 开关打开 或 正在全屏预览（全屏时一定不熄屏） */
+    private void applyKeepOn() {
+        boolean on = fsActive || Prefs.keepOn(this);
+        if (on) {
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        } else {
+            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        }
+    }
+
+    // ------------------------------------------------------------ 预设
+
+    /** 依当前存储重建预设横滑条 */
+    private void rebuildPresetRow() {
+        if (presetRow == null) return;
+        java.util.List<Presets.Item> items = Presets.list(this);
+        presetRow.removeAllViews();
+        presetItems = items;
+        presetChips = new ChipView[items.size()];
+        if (presetScroll != null) {
+            presetScroll.setVisibility(items.isEmpty() ? View.GONE : View.VISIBLE);
+        }
+        if (presetHint != null) {
+            presetHint.setText(items.isEmpty()
+                    ? "把当前模式、配色、灵敏度、平滑一起存下来，之后一键切回"
+                    : "点一下套用，长按删除（最多 " + Presets.MAX + " 条）");
+        }
+        float d = getResources().getDisplayMetrics().density;
+        for (int i = 0; i < items.size(); i++) {
+            final Presets.Item it = items.get(i);
+            ChipView chip = new ChipView(this, null);
+            chip.setLabel(it.name);
+            chip.setPalette(Palette.byIndex(it.palette));
+            chip.setChecked(false);
+            android.widget.LinearLayout.LayoutParams lp =
+                    new android.widget.LinearLayout.LayoutParams(
+                            ViewGroup.LayoutParams.WRAP_CONTENT,
+                            ViewGroup.LayoutParams.WRAP_CONTENT);
+            if (presetRow.getChildCount() > 0) {
+                lp.leftMargin = (int) (8 * d);
+            }
+            chip.setLayoutParams(lp);
+            chip.setOnClickListener(v -> applyPreset(it));
+            chip.setOnLongClickListener(v -> {
+                confirmDeletePreset(it);
+                return true;
+            });
+            presetRow.addView(chip);
+            presetChips[i] = chip;
+        }
+        syncPresetSelection();
+    }
+
+    /** 把"当前设置就是这套"的预设高亮出来（其余保持描边态） */
+    private void syncPresetSelection() {
+        if (presetChips == null || presetChips.length == 0) return;
+        if (presetItems == null || presetItems.size() != presetChips.length) return;
+        Presets.Item cur = Presets.capture(this);
+        for (int i = 0; i < presetChips.length; i++) {
+            if (presetChips[i] == null) continue;
+            presetChips[i].setChecked(sameSettings(presetItems.get(i), cur));
+        }
+    }
+
+    private static boolean sameSettings(Presets.Item a, Presets.Item b) {
+        if (a == null || b == null) return false;
+        return a.style == b.style
+                && a.palette == b.palette
+                && a.smooth == b.smooth
+                && a.peak == b.peak
+                && a.stereoOn == b.stereoOn
+                && a.stereoMode == b.stereoMode
+                && a.autoSens == b.autoSens
+                && a.freqAxis == b.freqAxis
+                && a.idle == b.idle
+                && a.vizHz == b.vizHz
+                && Math.abs(a.sens - b.sens) < 0.02f
+                && (a.palette != Palette.CUSTOM.ordinal()
+                || (a.c0 == b.c0 && a.c1 == b.c1 && a.c2 == b.c2));
+    }
+
+    /** 套用一条预设：先写 Prefs，再把视图与控件同步过去 */
+    private void applyPreset(Presets.Item it) {
+        Presets.apply(this, it);
+        styleIdx = it.style;
+        paletteIdx = it.palette;
+
+        preview.setSmoothTau(Prefs.smoothTauOf(it.smooth));
+        preview.setFreqAxis(it.freqAxis);
+        preview.setIdleAnim(it.idle);
+        preview.setRenderHz(Prefs.vizHzValue(it.vizHz));
+        AudioEngine.get().setSensitivity(it.sens);
+        AudioEngine.get().setAutoSens(it.autoSens);
+        // 自定义配色的色板要跟着重取，否则色块还停在旧颜色上
+        for (int i = 0; i < swatches.length; i++) {
+            swatches[i].setPalette(Palette.byIndex(i));
+        }
+        // 这些监听器都是幂等的：值没变就什么都不做，变了就当用户手动改了一次
+        if (swStereo != null) swStereo.setChecked(it.stereoOn);
+        if (swIdle != null) swIdle.setChecked(it.idle);
+        if (swAutoSens != null) swAutoSens.setChecked(it.autoSens);
+        if (swFreqAxis != null) swFreqAxis.setChecked(it.freqAxis);
+        if (seekSens != null) seekSens.setProgress(sensToProgress(it.sens));
+        if (hzChips != null) {
+            for (int i = 0; i < hzChips.length; i++) {
+                hzChips[i].setChecked(i == it.vizHz);
+            }
+        }
+        Refresh.apply(this);
+        applySelections();
+        syncOverlay();
+        Toast.makeText(this, "已套用 " + it.name, Toast.LENGTH_SHORT).show();
+    }
+
+    private void confirmDeletePreset(Presets.Item it) {
+        // 用项目自己的深色确认框，跟界面同一套配色（系统 AlertDialog 是白底的）
+        new ConfirmDialog(this, Palette.byIndex(paletteIdx),
+                "删除预设",
+                "确定删除「" + it.name + "」？删除后要重新调一遍才能存回来。",
+                "删除", () -> {
+            Presets.delete(this, it.name);
+            rebuildPresetRow();
+        }).show();
     }
 
     // ------------------------------------------------------------ 监听控制

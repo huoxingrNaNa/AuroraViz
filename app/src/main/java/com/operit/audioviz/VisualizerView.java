@@ -87,6 +87,12 @@ public class VisualizerView extends View {
     /** 相邻两次绘制的间隔（ms），峰值按时间匀速下落，与帧率解耦 */
     private float peakDtMs = 16f;
     private long lastPeakAtMs = 0L;
+    /** 累计绘制帧数，给"全屏实测帧率"用（只读计数，不影响绘制） */
+    private long drawCount = 0L;
+
+    public long drawCount() {
+        return drawCount;
+    }
 
     private Style style = Style.COLUMN;
     private Palette palette = Palette.NEON;
@@ -95,6 +101,8 @@ public class VisualizerView extends View {
     private boolean drawBackground = false;
     /** 自驱重绘开关：录制导出时用独立 View 手动逐帧绘制，需关掉自驱 */
     private boolean selfDrive = true;
+    /** 上一帧是否有真实音频在跑（false=待机呼吸动画，会压到 30fps） */
+    private boolean lastActive = true;
     private boolean showModeLabel = false;
     /** 右上角模式标签的基线高度（dp），由宿主按自己顶部占用的空间设置 */
     private float labelTopDp = 38f;
@@ -230,6 +238,14 @@ public class VisualizerView extends View {
     /** 可视化渲染帧率上限：0=跟随屏幕刷新，也可设 30/60/90/120 */
     public void setRenderHz(int hz) {
         renderHz = Math.max(0, hz);
+        // Android 14 起官方给了 View 级的帧率申请接口：比自己改窗口属性更容易被系统采纳，
+        // 0 表示"不表态"，交给系统按内容决定。横屏 / 全屏这种场景就是靠它把模式顶上去的。
+        if (android.os.Build.VERSION.SDK_INT >= 34) {
+            try {
+                setRequestedFrameRate(renderHz > 0 ? renderHz : 0f);
+            } catch (Throwable ignored) {
+            }
+        }
     }
 
     /** 频谱跟随的平滑程度：时间常数 ms（8=紧跟，45=很软） */
@@ -275,6 +291,7 @@ public class VisualizerView extends View {
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
+        drawCount++;
         drawContent(canvas);
     }
 
@@ -327,6 +344,7 @@ public class VisualizerView extends View {
 
         boolean active = engine.isRunning()
                 && System.currentTimeMillis() - engine.lastFrameAt() < 700;
+        lastActive = active;
         float bass = active ? engine.bassLevel() : 0f;
         float beat = active ? engine.beat() : 0f;
 
@@ -433,11 +451,15 @@ public class VisualizerView extends View {
         if (showModeLabel) drawModeLabel(canvas, w, h);
         if (selfDrive) {
             // 自驱重绘：renderHz>0 时限速，避免不必要的耗电
-            if (renderHz <= 0) {
+            // 待机（没有音频在跑、只是呼吸动画）时压到 30fps：
+            // 慢速正弦在 30fps 下看不出差别，但少画 3/4 的帧，发热和耗电明显下降
+            int effHz = renderHz;
+            if (!lastActive && (effHz <= 0 || effHz > 30)) effHz = 30;
+            if (effHz <= 0) {
                 postInvalidateOnAnimation();
             } else {
                 long now2 = android.os.SystemClock.uptimeMillis();
-                long frameMs = Math.max(4, 1000 / renderHz);
+                long frameMs = Math.max(4, 1000 / effHz);
                 long since = now2 - lastInvalidateAt;
                 if (since >= frameMs - 2) {
                     lastInvalidateAt = now2;

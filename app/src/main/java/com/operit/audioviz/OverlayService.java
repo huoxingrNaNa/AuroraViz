@@ -37,6 +37,11 @@ public class OverlayService extends Service {
     public static final String ACTION_STATE = "com.operit.audioviz.action.STATE";
     public static final String ACTION_ERROR = "com.operit.audioviz.action.ERROR";
     public static final String ACTION_APPLY = "com.operit.audioviz.action.APPLY";
+    /**
+     * 仅在本次全屏预览期间临时收起 / 恢复悬浮窗。
+     * 与 ACTION_APPLY 的区别：不写 Prefs.overlayEnabled，用户"显示悬浮窗"的设置保持原样。
+     */
+    public static final String ACTION_TEMP_OVERLAY = "com.operit.audioviz.action.TEMP_OVERLAY";
     /** 悬浮窗被隐藏（但监听继续） */
     public static final String ACTION_OVERLAY_CHANGED = "com.operit.audioviz.action.OVERLAY_CHANGED";
 
@@ -45,6 +50,8 @@ public class OverlayService extends Service {
     public static final String EXTRA_RESULT_DATA = "result_data";
     public static final String EXTRA_MESSAGE = "message";
     public static final String EXTRA_SHOW_OVERLAY = "show_overlay";
+    /** true=临时收起 false=恢复 */
+    public static final String EXTRA_TEMP_HIDE = "temp_hide";
 
     private static final String CHANNEL_ID = "aurora_overlay";
     private static final int NOTIF_ID = 1001;
@@ -59,6 +66,8 @@ public class OverlayService extends Service {
     private WindowManager.LayoutParams params;
     private FrameLayout overlayView;
     private VisualizerView viz;
+    /** 全屏预览期间临时收起浮窗（只影响窗口，不影响 Prefs.overlayEnabled） */
+    private boolean tempHidden = false;
     private MediaProjection projection;
     private VirtualDisplay virtualDisplay;
     private ImageReader imageReader;
@@ -102,6 +111,21 @@ public class OverlayService extends Service {
 
         if (intent != null && ACTION_STOP.equals(intent.getAction())) {
             shutdown();
+            return START_NOT_STICKY;
+        }
+
+        if (intent != null && ACTION_TEMP_OVERLAY.equals(intent.getAction())) {
+            if (!running) {
+                stopSelf();
+                return START_NOT_STICKY;
+            }
+            tempHidden = intent.getBooleanExtra(EXTRA_TEMP_HIDE, true);
+            if (tempHidden) {
+                // 只摘掉窗口，不动 Prefs.overlayEnabled，退出全屏时原样还原
+                hideOverlay();
+            } else if (Prefs.overlayEnabled(this)) {
+                showOverlay();
+            }
             return START_NOT_STICKY;
         }
 
@@ -398,6 +422,8 @@ public class OverlayService extends Service {
 
     private void showOverlay() {
         if (overlayView != null) return;
+        // 全屏预览期间不许被其他地方顺手弹回来
+        if (tempHidden) return;
 
         overlayView = new FrameLayout(this);
         viz = new VisualizerView(this);
@@ -611,6 +637,7 @@ public class OverlayService extends Service {
         }
         viz = null;
         TextCard.get().stop();
+        tempHidden = false;
         running = false;
         broadcastState();
         stopForeground(true);

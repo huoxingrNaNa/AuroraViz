@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/rootBg"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- 常规界面层（页签 + 页签内容），全屏预览时整层被 fsLayer 盖住 -->
+    <LinearLayout
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical">
@@ -93,6 +98,23 @@
                 android:id="@+id/preview"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent" />
+
+            <!-- 全屏入口：点它或点整块预览区都能进全屏 -->
+            <TextView
+                android:id="@+id/fsEntry"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="top|start"
+                android:layout_marginLeft="12dp"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_pill"
+                android:paddingLeft="11dp"
+                android:paddingTop="4dp"
+                android:paddingRight="11dp"
+                android:paddingBottom="4dp"
+                android:text="全屏 ⤢"
+                android:textColor="#CCF2F5FF"
+                android:textSize="9sp" />
 
             <LinearLayout
                 android:layout_width="wrap_content"
@@ -322,6 +344,65 @@
                 android:layout_marginLeft="8dp"
                 android:layout_weight="1" />
         </LinearLayout>
+
+        <!-- 预设 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:letterSpacing="0.2"
+                android:tag="label"
+                android:text="预设"
+                android:textColor="#FF8A93B2"
+                android:textSize="10sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/btnPresetSave"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_pill"
+                android:paddingLeft="12dp"
+                android:paddingTop="5dp"
+                android:paddingRight="12dp"
+                android:paddingBottom="5dp"
+                android:text="＋ 存为预设"
+                android:textColor="#FF8CF7E4"
+                android:textSize="10sp" />
+        </LinearLayout>
+
+        <HorizontalScrollView
+            android:id="@+id/presetScroll"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:scrollbars="none"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:id="@+id/presetRow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal" />
+        </HorizontalScrollView>
+
+        <TextView
+            android:id="@+id/presetHint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:lineSpacingExtra="2dp"
+            android:tag="hint"
+            android:text="把当前模式、配色、灵敏度、平滑一起存下来，之后一键切回"
+            android:textColor="#FF6F7896"
+            android:textSize="9.5sp" />
 
         <!-- 主题 -->
         <LinearLayout
@@ -657,6 +738,120 @@
 
         <Switch style="@style/AuroraSwitch"
                     android:id="@+id/swIdle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:showText="false" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="屏幕常亮"
+                        android:textColor="#FFF2F5FF"
+                        android:textSize="12.5sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:tag="hint"
+                        android:text="停留在本应用时不让屏幕熄灭（全屏观看时自动生效）"
+                        android:textColor="#FF6F7896"
+                        android:textSize="9.5sp" />
+                </LinearLayout>
+
+                <Switch style="@style/AuroraSwitch"
+                    android:id="@+id/swKeepOn"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:showText="false" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="全屏隐藏系统栏"
+                        android:textColor="#FFF2F5FF"
+                        android:textSize="12.5sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:tag="hint"
+                        android:text="关掉后全屏仍保留状态栏与手势条；个别机型在沉浸态会把帧率锁到 60，可关掉对比"
+                        android:textColor="#FF6F7896"
+                        android:textSize="9.5sp" />
+                </LinearLayout>
+
+                <Switch style="@style/AuroraSwitch"
+                    android:id="@+id/swFsBars"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:showText="false" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="全屏允许横屏"
+                        android:textColor="#FFF2F5FF"
+                        android:textSize="12.5sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:tag="hint"
+                        android:text="关掉后全屏恒为竖屏；若开横屏才掉帧，可关掉对比"
+                        android:textColor="#FF6F7896"
+                        android:textSize="9.5sp" />
+                </LinearLayout>
+
+                <Switch style="@style/AuroraSwitch"
+                    android:id="@+id/swFsLand"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:showText="false" />
@@ -1362,4 +1557,34 @@
             android:layout_marginLeft="8dp"
             android:layout_weight="1" />
     </LinearLayout>
-</LinearLayout>
+    </LinearLayout>
+
+    <!-- 全屏预览层：只有一个可视化视图 + 一句淡出的退出提示 -->
+    <FrameLayout
+        android:id="@+id/fsLayer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#FF000000"
+        android:visibility="gone">
+
+        <com.operit.audioviz.VisualizerView
+            android:id="@+id/fsPreview"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <TextView
+            android:id="@+id/fsTip"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|center_horizontal"
+            android:layout_marginBottom="52dp"
+            android:background="@drawable/bg_pill"
+            android:paddingLeft="14dp"
+            android:paddingTop="6dp"
+            android:paddingRight="14dp"
+            android:paddingBottom="6dp"
+            android:text="轻触画面退出全屏"
+            android:textColor="#CCF2F5FF"
+            android:textSize="10sp" />
+    </FrameLayout>
+</FrameLayout>

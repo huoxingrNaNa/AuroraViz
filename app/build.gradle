@@ -17,8 +17,8 @@ android {
         applicationId "com.operit.audioviz"
         minSdk 26
         targetSdk 36
-        versionCode 173
-        versionName "8.9.3"
+        versionCode 185
+        versionName "8.10"
     }
 
     signingConfigs {
